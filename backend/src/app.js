@@ -8,6 +8,7 @@ import { documentRoutes } from './routes/documentRoutes.js'
 import { shipmentRoutes } from './routes/shipmentRoutes.js'
 import { healthRoutes } from './routes/healthRoutes.js'
 import { driverTelemetryRoutes } from './routes/driverTelemetryRoutes.js'
+import { settingsRoutes } from './routes/settingsRoutes.js'
 
 const app = express()
 
@@ -25,6 +26,7 @@ app.use('/api', authRoutes)
 app.use('/api', shipmentRoutes)
 app.use('/api', documentRoutes)
 app.use('/api', driverTelemetryRoutes)
+app.use('/api', settingsRoutes)
 
 app.use((_req, res) => {
   res.status(404).json({

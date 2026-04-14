@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, Fragment } from 'react'
+import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
 import { GoogleMap, LoadScript, OverlayViewF, Polyline } from '@react-google-maps/api'
 import {
   AlertCircle,
@@ -70,6 +70,34 @@ const buildApiUrl = (path) => {
   }
 
   return `${apiBaseUrl}${normalizedPath}`
+}
+
+const triggerFileDownload = (filename, content, mimeType = 'text/plain;charset=utf-8') => {
+  const blob = new Blob([content], { type: mimeType })
+  const url = window.URL.createObjectURL(blob)
+  const link = window.document.createElement('a')
+  link.href = url
+  link.download = filename
+  window.document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+const csvEscape = (value) => {
+  const raw = String(value ?? '')
+  return `"${raw.replace(/"/g, '""')}"`
+}
+
+const toCsv = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return ''
+  }
+
+  const headers = Object.keys(rows[0])
+  const headerRow = headers.map(csvEscape).join(',')
+  const bodyRows = rows.map((row) => headers.map((header) => csvEscape(row[header])).join(','))
+  return [headerRow, ...bodyRows].join('\n')
 }
 
 const fallbackData = {
@@ -948,6 +976,24 @@ function App() {
   const [routeFilters, setRouteFilters] = useState({
   })
 
+  const [settings, setSettings] = useState({
+    driverMatching: true,
+    delayRisk: true,
+    costLeak: true,
+    invoiceAnomaly: false,
+    highConfidence: 85,
+    mediumConfidence: 65,
+    lowConfidence: 45,
+    aiExplainability: true,
+    overrideTracking: true,
+  })
+  const [settingsSaveState, setSettingsSaveState] = useState('idle')
+  const [settingsLastSavedAt, setSettingsLastSavedAt] = useState(null)
+  const [isDocumentUploading, setIsDocumentUploading] = useState(false)
+  const [documentUploadContext, setDocumentUploadContext] = useState(null)
+  const [shipmentDocumentsByLoad, setShipmentDocumentsByLoad] = useState({})
+  const documentUploadInputRef = useRef(null)
+
   const mapApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
   useEffect(() => {
@@ -967,6 +1013,33 @@ function App() {
     }
 
     loadDashboard()
+  }, [])
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch(buildApiUrl('/api/settings?scope=operations'))
+        if (!response.ok) {
+          return
+        }
+
+        const payload = await response.json()
+        if (payload?.payload && typeof payload.payload === 'object') {
+          setSettings((previous) => ({
+            ...previous,
+            ...payload.payload,
+          }))
+        }
+
+        if (payload?.updatedAt) {
+          setSettingsLastSavedAt(payload.updatedAt)
+        }
+      } catch {
+        // Keep defaults when settings service is unavailable.
+      }
+    }
+
+    loadSettings()
   }, [])
 
   const metrics = useMemo(() => dashboardData.metrics ?? [], [dashboardData.metrics])
@@ -1244,9 +1317,241 @@ function App() {
     }
   }
 
+  const fetchShipmentDocuments = async (shipmentIdentifier) => {
+    const targetId = String(shipmentIdentifier ?? '').trim()
+    if (!targetId) {
+      return []
+    }
+
+    const response = await fetch(buildApiUrl(`/api/documents/shipment/${encodeURIComponent(targetId)}`))
+    if (!response.ok) {
+      throw new Error('Failed to load shipment documents.')
+    }
+
+    const payload = await response.json()
+    const documents = Array.isArray(payload?.documents) ? payload.documents : []
+
+    setShipmentDocumentsByLoad((previous) => ({
+      ...previous,
+      [targetId]: documents,
+    }))
+
+    return documents
+  }
+
+  const handleOpenDocumentPicker = (shipmentIdentifier) => {
+    const targetId = String(shipmentIdentifier ?? '').trim()
+    if (!targetId) {
+      window.alert('No shipment selected for upload.')
+      return
+    }
+
+    setDocumentUploadContext({
+      shipmentIdentifier: targetId,
+    })
+
+    if (documentUploadInputRef.current) {
+      documentUploadInputRef.current.value = ''
+      documentUploadInputRef.current.click()
+    }
+  }
+
+  const handleDocumentInputChange = async (event) => {
+    const inputFile = event.target.files?.[0]
+    const shipmentIdentifier = documentUploadContext?.shipmentIdentifier
+
+    if (!inputFile || !shipmentIdentifier) {
+      return
+    }
+
+    setIsDocumentUploading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('shipmentId', shipmentIdentifier)
+      formData.append('file', inputFile)
+
+      const response = await fetch(buildApiUrl('/api/documents/upload'), {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Upload failed.')
+      }
+
+      await fetchShipmentDocuments(shipmentIdentifier)
+      setActiveUploadId(null)
+      window.alert('Document uploaded successfully.')
+    } catch {
+      window.alert('Document upload failed. Please try again.')
+    } finally {
+      setIsDocumentUploading(false)
+      setDocumentUploadContext(null)
+    }
+  }
+
+  const handleDownloadDocumentById = async (documentId) => {
+    const targetId = String(documentId ?? '').trim()
+    if (!targetId) {
+      return
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/documents/${encodeURIComponent(targetId)}/download-url`))
+      if (!response.ok) {
+        throw new Error('Failed to get download URL.')
+      }
+
+      const payload = await response.json()
+      if (!payload?.downloadUrl) {
+        throw new Error('Download URL missing.')
+      }
+
+      window.open(payload.downloadUrl, '_blank', 'noopener,noreferrer')
+    } catch {
+      window.alert('Unable to download document right now.')
+    }
+  }
+
+  const handleDownloadLatestDocument = async (shipmentIdentifier) => {
+    const targetId = String(shipmentIdentifier ?? '').trim()
+    if (!targetId) {
+      window.alert('No shipment selected for download.')
+      return
+    }
+
+    try {
+      const existing = shipmentDocumentsByLoad[targetId]
+      const documents = Array.isArray(existing) && existing.length > 0
+        ? existing
+        : await fetchShipmentDocuments(targetId)
+
+      if (!documents.length) {
+        window.alert('No uploaded documents found for this shipment yet.')
+        return
+      }
+
+      await handleDownloadDocumentById(documents[0].id)
+    } catch {
+      window.alert('Unable to fetch shipment documents.')
+    }
+  }
+
+  const handleSaveAllChanges = async () => {
+    setSettingsSaveState('saving')
+
+    try {
+      const response = await fetch(buildApiUrl('/api/settings'), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scope: 'operations',
+          payload: settings,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Save failed.')
+      }
+
+      const payload = await response.json()
+      setSettingsLastSavedAt(payload?.updatedAt ?? new Date().toISOString())
+      setSettingsSaveState('saved')
+
+      window.setTimeout(() => {
+        setSettingsSaveState('idle')
+      }, 1400)
+    } catch {
+      setSettingsSaveState('error')
+      window.alert('Failed to save settings to backend.')
+    }
+  }
+
+  const handleExportConfiguration = () => {
+    triggerFileDownload(
+      'operations-settings.json',
+      JSON.stringify({
+        scope: 'operations',
+        settings,
+        savedAt: settingsLastSavedAt,
+      }, null, 2),
+      'application/json;charset=utf-8'
+    )
+  }
+
+  const handleExportRoutesData = () => {
+    const rows = routesTracking.map((route) => ({
+      routeId: route.id,
+      driver: route.driver,
+      status: route.status,
+      progress: route.progress,
+      eta: route.eta,
+      origin: route.origin,
+      destination: route.destination?.city ?? route.destination,
+    }))
+
+    triggerFileDownload('routes-tracking.csv', toCsv(rows), 'text/csv;charset=utf-8')
+  }
+
+  const handleExportInvoices = () => {
+    const invoiceRows = (dashboardData.invoiceList ?? []).map((invoice) => ({
+      invoiceId: invoice.id,
+      customer: invoice.customerName,
+      amount: invoice.amount,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      status: invoice.status,
+    }))
+
+    triggerFileDownload('invoices.csv', toCsv(invoiceRows), 'text/csv;charset=utf-8')
+  }
+
+  const handleExportReports = () => {
+    const reportRows = [
+      { report: 'On-time Performance', value: '94.2%' },
+      { report: 'Delay Events', value: '17' },
+      { report: 'Driver Utilization', value: '82%' },
+      { report: 'Revenue Trend', value: '+15%' },
+      { report: 'Margin Analysis', value: '18.5%' },
+    ]
+
+    triggerFileDownload('reports-summary.csv', toCsv(reportRows), 'text/csv;charset=utf-8')
+  }
+
+  const handleExportPodReport = (podRows) => {
+    const rows = (podRows ?? []).map((item) => ({
+      loadId: item.id,
+      customer: item.customerName,
+      driver: item.driverName,
+      status: item.status,
+      deliveredAt: `${item.date} ${item.time}`,
+    }))
+
+    triggerFileDownload('pod-report.csv', toCsv(rows), 'text/csv;charset=utf-8')
+  }
+
+  useEffect(() => {
+    if (!selectedOrder?.id) {
+      return
+    }
+
+    fetchShipmentDocuments(selectedOrder.id).catch(() => {
+      // Keep UI usable if docs API fails.
+    })
+  }, [selectedOrder?.id])
+
   return (
     <LoadScript googleMapsApiKey={mapApiKey}>
       <div className="h-screen w-full bg-slate-50 text-slate-900">
+        <input
+          ref={documentUploadInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleDocumentInputChange}
+        />
         <div className="flex h-full w-full overflow-hidden bg-white">
           <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
             <div className="px-7 pb-6 pt-7">
@@ -1985,7 +2290,13 @@ function App() {
                                       <p className="text-sm font-medium text-slate-500">BOL-{selectedOrder.id}.pdf</p>
                                     </div>
                                   </div>
-                                  <button type="button" className="text-sm font-bold text-blue-500">Download</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownloadLatestDocument(selectedOrder.id)}
+                                    className="text-sm font-bold text-blue-500"
+                                  >
+                                    Download
+                                  </button>
                                 </article>
 
                                 <article className="flex items-center justify-between rounded-2xl border border-slate-200 p-4 opacity-70">
@@ -2011,16 +2322,44 @@ function App() {
                                       <p className="text-sm font-medium text-slate-500">RC-{selectedOrder.id}.pdf</p>
                                     </div>
                                   </div>
-                                  <button type="button" className="text-sm font-bold text-blue-500">Download</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownloadLatestDocument(selectedOrder.id)}
+                                    className="text-sm font-bold text-blue-500"
+                                  >
+                                    Download
+                                  </button>
                                 </article>
 
                                 <button
                                   type="button"
-                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-3 text-[1.05rem] font-semibold text-slate-500"
+                                  onClick={() => handleOpenDocumentPicker(selectedOrder.id)}
+                                  disabled={isDocumentUploading}
+                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-3 text-[1.05rem] font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   <Upload className="h-4 w-4" />
-                                  Upload Document
+                                  {isDocumentUploading ? 'Uploading...' : 'Upload Document'}
                                 </button>
+
+                                {(shipmentDocumentsByLoad[selectedOrder.id] ?? []).length > 0 ? (
+                                  <div className="rounded-2xl border border-slate-200 p-3.5">
+                                    <p className="text-sm font-bold text-slate-700">Uploaded from backend</p>
+                                    <div className="mt-2 space-y-2">
+                                      {(shipmentDocumentsByLoad[selectedOrder.id] ?? []).slice(0, 4).map((document) => (
+                                        <div key={document.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                                          <p className="truncate pr-3 text-xs font-semibold text-slate-600">{document.originalName}</p>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDownloadDocumentById(document.id)}
+                                            className="text-xs font-bold text-blue-600"
+                                          >
+                                            Download
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           ) : null}
@@ -2825,7 +3164,11 @@ function App() {
                   <div className="flex items-center justify-between px-6 py-4 lg:px-8">
                     <h2 className="text-[2rem] font-bold tracking-tight text-slate-800">Routes & Tracking</h2>
                     <div className="flex items-center gap-3">
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+                      <button
+                        type="button"
+                        onClick={handleExportRoutesData}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
                         <Download className="h-4 w-4 text-slate-400" />
                         Export Data
                       </button>
@@ -3115,13 +3458,21 @@ function App() {
                       <p className="mt-1 text-sm font-medium text-slate-500">Company Configuration & Governance Center</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-all">
+                      <button
+                        type="button"
+                        onClick={handleExportConfiguration}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-all"
+                      >
                         <Download className="h-4 w-4" />
                         Export Configuration
                       </button>
-                      <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all active:scale-[0.98]">
+                      <button
+                        type="button"
+                        onClick={handleSaveAllChanges}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all active:scale-[0.98]"
+                      >
                         <FileCheck2 className="h-4 w-4" />
-                        Save All Changes
+                        {settingsSaveState === 'saving' ? 'Saving...' : settingsSaveState === 'saved' ? 'Saved' : 'Save All Changes'}
                       </button>
                     </div>
                   </div>
@@ -4211,10 +4562,18 @@ function App() {
                           <p className="text-[0.95rem] font-medium text-slate-500 mt-1">Queue of delivered loads pending POD submission or approval</p>
                         </div>
                         <div className="flex items-center gap-4">
-                          <button className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-[0.9rem] font-bold text-slate-700 shadow-[0_1px_4px_-2px_rgba(0,0,0,0.1)] transition hover:bg-slate-50 hover:text-slate-900">
+                          <button
+                            type="button"
+                            onClick={() => handleExportPodReport(podList)}
+                            className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-[0.9rem] font-bold text-slate-700 shadow-[0_1px_4px_-2px_rgba(0,0,0,0.1)] transition hover:bg-slate-50 hover:text-slate-900"
+                          >
                             <Download className="h-[15px] w-[15px] text-slate-400" strokeWidth={2.5} /> Export Report
                           </button>
-                          <button className="flex items-center gap-2.5 rounded-xl bg-blue-600 px-5 py-2.5 text-[0.9rem] font-bold text-white shadow-[0_4px_12px_-4px_rgba(37,99,235,0.4)] transition hover:bg-blue-700">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDocumentPicker(selectedPodLoadId ?? podList[0]?.id)}
+                            className="flex items-center gap-2.5 rounded-xl bg-blue-600 px-5 py-2.5 text-[0.9rem] font-bold text-white shadow-[0_4px_12px_-4px_rgba(37,99,235,0.4)] transition hover:bg-blue-700"
+                          >
                             <Upload className="h-[15px] w-[15px]" strokeWidth={2.5} /> Bulk Upload
                           </button>
                         </div>
@@ -4322,7 +4681,14 @@ function App() {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      setActiveUploadId(activeUploadId === load.id ? null : load.id)
+
+                                      if (activeUploadId === load.id) {
+                                        setActiveUploadId(null)
+                                        return
+                                      }
+
+                                      setActiveUploadId(load.id)
+                                      handleOpenDocumentPicker(load.id)
                                     }}
                                     className={`rounded-[0.6rem] px-5 py-2 text-[0.8rem] tracking-tight font-bold transition relative z-10 ${load.actionTone}`}
                                   >
@@ -4336,7 +4702,21 @@ function App() {
                                     )}
                                   </div>
                                 ) : (
-                                  <button onClick={e => e.stopPropagation()} className={`relative z-10 rounded-xl px-2 py-1.5 font-bold text-[0.8rem] transition ${load.actionTone}`}>{load.actionLabel}</button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+
+                                      if (String(load.actionLabel).toLowerCase().includes('download')) {
+                                        handleDownloadLatestDocument(load.id)
+                                        return
+                                      }
+
+                                      handleOpenDocumentPicker(load.id)
+                                    }}
+                                    className={`relative z-10 rounded-xl px-2 py-1.5 font-bold text-[0.8rem] transition ${load.actionTone}`}
+                                  >
+                                    {load.actionLabel}
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -4344,12 +4724,15 @@ function App() {
                             {/* Inline Dropzone Expansion */}
                             {activeUploadId === load.id && load.status === 'Pending Upload' && (
                               <div className="px-1 pb-6 mb-4 animate-in slide-in-from-top-1 fade-in duration-200">
-                                <div className="w-full relative rounded-2xl border-[1.5px] border-dashed border-[#93c5fd] bg-gradient-to-b from-[#eff6ff] to-[#f8fafc] py-16 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:from-[#e0f0ff] transition group">
+                                <div
+                                  onClick={() => handleOpenDocumentPicker(load.id)}
+                                  className="w-full relative rounded-2xl border-[1.5px] border-dashed border-[#93c5fd] bg-gradient-to-b from-[#eff6ff] to-[#f8fafc] py-16 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:from-[#e0f0ff] transition group"
+                                >
                                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm border border-slate-100 mb-4 transition group-hover:bg-blue-50 group-hover:scale-105">
                                     <Upload className="h-[18px] w-[18px] text-blue-500" strokeWidth={2.5} />
                                   </div>
                                   <h4 className="text-[1.05rem] font-bold tracking-tight text-slate-700">Upload POD Documents (Image/PDF)</h4>
-                                  <p className="mt-1.5 text-[0.85rem] font-medium text-slate-400">Drag and drop files here or click to browse</p>
+                                  <p className="mt-1.5 text-[0.85rem] font-medium text-slate-400">{isDocumentUploading ? 'Uploading...' : 'Drag and drop files here or click to browse'}</p>
                                 </div>
                               </div>
                             )}
@@ -4433,7 +4816,13 @@ function App() {
                             <div className="rounded-[1.25rem] border border-slate-200/80 bg-white p-1 mb-5 shadow-sm hover:shadow-[0_4px_12px_-4px_rgba(0,0,0,0.1)] transition-all duration-300">
                               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100/60 pb-3 mb-1">
                                 <span className="text-[0.85rem] font-bold text-slate-700">Delivery Receipt</span>
-                                <span className="text-[0.75rem] font-bold text-blue-500 cursor-pointer hover:underline">Download</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadLatestDocument(selLoad.id)}
+                                  className="text-[0.75rem] font-bold text-blue-500 hover:underline"
+                                >
+                                  Download
+                                </button>
                               </div>
 
                               <div className="bg-slate-50/50 rounded-xl m-3 border border-slate-100 h-[170px] flex p-3 relative overflow-hidden group cursor-pointer">
@@ -4471,7 +4860,13 @@ function App() {
                             <div className="rounded-[1.25rem] border border-slate-200/80 bg-white p-1 shadow-sm hover:shadow-[0_4px_12px_-4px_rgba(0,0,0,0.1)] transition-all duration-300">
                               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100/60 pb-3 mb-1">
                                 <span className="text-[0.85rem] font-bold text-slate-700">Photo Evidence</span>
-                                <span className="text-[0.75rem] font-bold text-blue-500 cursor-pointer hover:underline">Download</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadLatestDocument(selLoad.id)}
+                                  className="text-[0.75rem] font-bold text-blue-500 hover:underline"
+                                >
+                                  Download
+                                </button>
                               </div>
                               <div className="m-3 h-[140px] rounded-xl overflow-hidden relative group cursor-pointer">
                                 <img
@@ -4504,10 +4899,18 @@ function App() {
                           <p className="text-[0.95rem] font-medium text-slate-500 mt-1">Manage invoices, track payments, and handle customer billing</p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <button className="flex items-center gap-2 rounded-lg bg-[#f8fafc] px-4 py-2 text-[0.85rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                          <button
+                            type="button"
+                            onClick={handleExportInvoices}
+                            className="flex items-center gap-2 rounded-lg bg-[#f8fafc] px-4 py-2 text-[0.85rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
                             <Download className="h-3.5 w-3.5" strokeWidth={2.5} /> Export Data
                           </button>
-                          <button className="flex items-center gap-2 rounded-lg bg-[#f8fafc] px-4 py-2 text-[0.85rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                          <button
+                            type="button"
+                            onClick={() => setActiveSection('settings')}
+                            className="flex items-center gap-2 rounded-lg bg-[#f8fafc] px-4 py-2 text-[0.85rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
                             <Settings className="h-3.5 w-3.5" strokeWidth={2.5} /> Settings
                           </button>
                           <button className="flex items-center gap-2 rounded-md bg-[#6082f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-600 transition-colors">
@@ -4934,7 +5337,11 @@ function App() {
                           <p className="text-[0.95rem] font-medium text-slate-500 mt-1">Reports module with chart-first design for operational and financial analysis</p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <button className="flex items-center gap-2 rounded-lg bg-[#f8fafc] border border-slate-200 px-4 py-2 text-[0.85rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                          <button
+                            type="button"
+                            onClick={handleExportReports}
+                            className="flex items-center gap-2 rounded-lg bg-[#f8fafc] border border-slate-200 px-4 py-2 text-[0.85rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
                             <Download className="h-3.5 w-3.5" strokeWidth={2.5} /> Bulk Export
                           </button>
                           <button className="flex items-center gap-2 rounded-md bg-[#6082f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-600 transition-colors">

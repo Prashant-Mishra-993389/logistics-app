@@ -70,6 +70,34 @@ const buildApiUrl = (path) => {
   return `${apiBaseUrl}${normalizedPath}`
 }
 
+const triggerFileDownload = (filename, content, mimeType = 'text/plain;charset=utf-8') => {
+  const blob = new Blob([content], { type: mimeType })
+  const url = window.URL.createObjectURL(blob)
+  const link = window.document.createElement('a')
+  link.href = url
+  link.download = filename
+  window.document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+const csvEscape = (value) => {
+  const raw = String(value ?? '')
+  return `"${raw.replace(/"/g, '""')}"`
+}
+
+const toCsv = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return ''
+  }
+
+  const headers = Object.keys(rows[0])
+  const headerRow = headers.map(csvEscape).join(',')
+  const bodyRows = rows.map((row) => headers.map((header) => csvEscape(row[header])).join(','))
+  return [headerRow, ...bodyRows].join('\n')
+}
+
 const fallbackData = {
   metrics: [
     {
@@ -1199,6 +1227,18 @@ function App() {
     setIsAvailabilityEditing(false)
     setIsSafetyEditing(false)
     setIsPayoutEditing(false)
+  }
+
+  const handleDownloadDriverProfile = () => {
+    triggerFileDownload(
+      'driver-profile-settings.json',
+      JSON.stringify({
+        scope: 'driver-profile',
+        settings,
+        savedAt: settingsLastSavedAt,
+      }, null, 2),
+      'application/json;charset=utf-8'
+    )
   }
 
   useEffect(() => {
@@ -6119,7 +6159,11 @@ function App() {
                       <p className="mt-1 text-[0.86rem] font-semibold text-slate-500">Manage your driver profile, availability, safety reminders, payout preferences, and app behavior.</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-[0.78rem] font-bold text-slate-700 transition hover:bg-slate-50">
+                      <button
+                        type="button"
+                        onClick={handleDownloadDriverProfile}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-[0.78rem] font-bold text-slate-700 transition hover:bg-slate-50"
+                      >
                         <Download className="h-4 w-4" />
                         Download Profile
                       </button>
@@ -7154,6 +7198,25 @@ function App() {
                 }))
               }
 
+              const handleExportWalletStatement = () => {
+                const statementRows = sortedPayments.map((payment) => ({
+                  paymentId: payment.id,
+                  route: payment.route,
+                  status: payment.status,
+                  baseRate: payment.baseRate,
+                  bonusAmount: payment.bonusAmount,
+                  deductionAmount: payment.deductionAmount,
+                  netEarning: payment.netEarning,
+                  payoutDate: payment.payoutDate,
+                }))
+
+                triggerFileDownload(
+                  `driver-wallet-statement-${walletSelectedMonth === 'all' ? 'all' : walletSelectedMonth}.csv`,
+                  toCsv(statementRows),
+                  'text/csv;charset=utf-8'
+                )
+              }
+
               const renderPaymentRows = (payments) => {
                 return payments.map((payment) => {
                   const isPending = String(payment.status ?? '').toLowerCase() === 'pending'
@@ -7220,7 +7283,11 @@ function App() {
                             <p className="mt-0.5 text-[0.86rem] font-semibold text-slate-500">Track driver earnings, pending payouts, and payment history for completed loads.</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button type="button" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
+                            <button
+                              type="button"
+                              onClick={handleExportWalletStatement}
+                              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+                            >
                               <Download className="h-4 w-4" />
                               Export Statement
                             </button>
