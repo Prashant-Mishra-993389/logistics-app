@@ -2,9 +2,18 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-const toNumber = (value, fallback) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+const toPort = (value, fallback) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) {
+    return fallback
+  }
+
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+    return fallback
+  }
+
+  return parsed
 }
 
 const toString = (value, fallback = '') => {
@@ -13,7 +22,7 @@ const toString = (value, fallback = '') => {
 }
 
 export const env = {
-  port: toNumber(process.env.PORT, 5000),
+  port: toPort(process.env.PORT, 5000),
   corsOrigin: toString(process.env.CORS_ORIGIN, '*'),
   nodeEnv: toString(process.env.NODE_ENV, 'development'),
   databaseUrl: toString(process.env.DATABASE_URL),
