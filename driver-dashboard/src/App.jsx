@@ -70,6 +70,23 @@ const buildApiUrl = (path) => {
   return `${apiBaseUrl}${normalizedPath}`
 }
 
+const toPhoneHref = (phoneNumber) => {
+  return `tel:${String(phoneNumber ?? '').replace(/[^+\d]/g, '')}`
+}
+
+const buildGoogleDirectionsUrl = (origin, destination) => {
+  const trimmedOrigin = String(origin ?? '').trim()
+  const trimmedDestination = String(destination ?? '').trim()
+
+  if (!trimmedOrigin || !trimmedDestination) {
+    return 'https://www.google.com/maps'
+  }
+
+  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trimmedOrigin)}&destination=${encodeURIComponent(trimmedDestination)}&travelmode=driving`
+}
+
+const DASHBOARD_DATE_FILTER_OPTIONS = ['Last 24 hours', 'Last 7 days', 'Last 30 days']
+
 const triggerFileDownload = (filename, content, mimeType = 'text/plain;charset=utf-8') => {
   const blob = new Blob([content], { type: mimeType })
   const url = window.URL.createObjectURL(blob)
@@ -1000,6 +1017,9 @@ function App() {
   const [dashboardRoutePath, setDashboardRoutePath] = useState(defaultDashboardRoutePath)
   const [dashboardRouteBounds, setDashboardRouteBounds] = useState(null)
   const [dashboardRouteMeta, setDashboardRouteMeta] = useState({ distance: '--', duration: '--' })
+  const [dashboardRouteViewMode, setDashboardRouteViewMode] = useState('map')
+  const [dashboardDateFilterIndex, setDashboardDateFilterIndex] = useState(1)
+  const [dashboardLocationFilterIndex, setDashboardLocationFilterIndex] = useState(0)
   const [isRouteLoading, setIsRouteLoading] = useState(false)
   const [selectedWeeklyPlanId, setSelectedWeeklyPlanId] = useState(null)
   const [selectedBidId, setSelectedBidId] = useState(null)
@@ -1055,6 +1075,7 @@ function App() {
   const [driverMessageState, setDriverMessageState] = useState('idle')
   const [driverMessageLastSentAt, setDriverMessageLastSentAt] = useState(null)
   const [driverMessageHistory, setDriverMessageHistory] = useState([])
+  const [isReceiverSignatureCleared, setIsReceiverSignatureCleared] = useState(false)
 
   // Driver Settings State
   const [settings, setSettings] = useState(() => {
@@ -1858,6 +1879,23 @@ function App() {
     }
   }, [activeDriverDispatch.notes, activeDriverDispatch.priority, currentTripPlan])
 
+  const dashboardLocationFilterOptions = useMemo(() => {
+    const options = ['All Locations']
+
+    if (activeDriverDispatch.origin) {
+      options.push(activeDriverDispatch.origin)
+    }
+
+    if (activeDriverDispatch.destination && activeDriverDispatch.destination !== activeDriverDispatch.origin) {
+      options.push(activeDriverDispatch.destination)
+    }
+
+    return options
+  }, [activeDriverDispatch.destination, activeDriverDispatch.origin])
+
+  const dashboardDateFilterLabel = DASHBOARD_DATE_FILTER_OPTIONS[dashboardDateFilterIndex] ?? DASHBOARD_DATE_FILTER_OPTIONS[0]
+  const dashboardLocationFilterLabel = dashboardLocationFilterOptions[dashboardLocationFilterIndex] ?? dashboardLocationFilterOptions[0]
+
   const bidPanelCompanyContact = useMemo(() => {
     return {
       dispatcher: dispatchDeskData.dispatcher,
@@ -1868,6 +1906,120 @@ function App() {
       emergencyLine: currentTripPlan?.emergencyLine ?? '+1 (800) 442-7711',
     }
   }, [currentTripPlan, dispatchDeskData.dispatcher, dispatchDeskData.email, dispatchDeskData.phone])
+
+  const cycleDashboardDateFilter = () => {
+    setDashboardDateFilterIndex((previousIndex) => (previousIndex + 1) % DASHBOARD_DATE_FILTER_OPTIONS.length)
+  }
+
+  const cycleDashboardLocationFilter = () => {
+    setDashboardLocationFilterIndex((previousIndex) => {
+      return (previousIndex + 1) % Math.max(dashboardLocationFilterOptions.length, 1)
+    })
+  }
+
+  const focusDashboardSchedule = () => {
+    setSelectedWeeklyPlanId(currentTripPlan?.id ?? driverWeeklyPlans[0]?.id ?? null)
+  }
+
+  const openDriverMessageComposer = (message, category = 'general', priority = 'normal') => {
+    setActiveSection('routes')
+    setDriverMessageCategory(category)
+    setDriverMessagePriority(priority)
+    setDriverMessageDraft(message)
+    setDriverMessageState('idle')
+  }
+
+  const handleOpenDispatchNavigation = () => {
+    const routeLink = buildGoogleDirectionsUrl(activeDriverDispatch.origin, activeDriverDispatch.destination)
+    window.open(routeLink, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleContactDispatcher = () => {
+    window.location.href = toPhoneHref(dispatchDeskData.phone)
+  }
+
+  const handleRequestHomeTime = () => {
+    openDriverMessageComposer(
+      `Requesting home time after completing ${activeDriverDispatch.id}. Please share next available window.`,
+      'general',
+      'normal'
+    )
+  }
+
+  const handlePlanBreakStop = () => {
+    openDriverMessageComposer(
+      `Planning break stop at ${hosPlanner.recommendedStop}. Updating ETA after halt.`,
+      'route',
+      'normal'
+    )
+  }
+
+  const handleOpenDriverChecklist = () => {
+    setActiveSection('dashboard')
+    setSelectedWeeklyPlanId(currentTripPlan?.id ?? driverWeeklyPlans[0]?.id ?? null)
+  }
+
+  const handleViewDriverPayoutHistory = () => {
+    setActiveSection('wallet')
+  }
+
+  const handleEmergencyRoadside = () => {
+    const emergencyLine = currentTripPlan?.emergencyLine ?? '+1 (800) 442-7711'
+    window.location.href = toPhoneHref(emergencyLine)
+  }
+
+  const handleLearnSafetyTip = () => {
+    setActiveSection('settings')
+  }
+
+  const handleQuickDispatchMessage = () => {
+    openDriverMessageComposer(dispatchDeskData.message, 'general', 'normal')
+  }
+
+  const handleExceptionTemplatePick = (templateLabel) => {
+    const templateMap = {
+      'Traffic delay': { category: 'delay', priority: 'high' },
+      'Dock wait > 60 min': { category: 'dock', priority: 'normal' },
+      'Route blocked / detour': { category: 'route', priority: 'high' },
+      'POD issue': { category: 'dock', priority: 'urgent' },
+    }
+
+    const template = templateMap[templateLabel] ?? { category: 'general', priority: 'normal' }
+    openDriverMessageComposer(`${templateLabel}: need dispatch assistance.`, template.category, template.priority)
+  }
+
+  const openPodWorkflow = (statusFilter = 'All') => {
+    setActiveSection('pod')
+    setPodViewMode('Workflow')
+    setPodStatusFilter(statusFilter)
+    setPodSelectedMonth('all')
+    setPodSelectedRecordId((currentRecordId) => {
+      if (currentRecordId) {
+        return currentRecordId
+      }
+
+      const matchingRecord = podWorkflowRecords.find((record) => statusFilter === 'All' || record.status === statusFilter)
+      return matchingRecord?.id ?? podWorkflowRecords[0]?.id ?? null
+    })
+  }
+
+  const handleSavePodDraftAction = () => {
+    setIsReceiverSignatureCleared(false)
+    openPodWorkflow('All')
+  }
+
+  const handleSubmitPodToCompany = () => {
+    setIsReceiverSignatureCleared(false)
+    openPodWorkflow('Pending')
+  }
+
+  const handleClearReceiverSignature = () => {
+    setIsReceiverSignatureCleared(true)
+  }
+
+  const handleEmailDispatcher = () => {
+    window.location.href = `mailto:${dispatchDeskData.email}`
+  }
 
   const roadCommunityFilterOptions = useMemo(() => {
     return ['All', ...new Set([...roadReportCategoryOptions, ...roadCommunityReports.map((report) => report.category)])]
@@ -3316,6 +3468,18 @@ function App() {
     }
   }, [activeSection, selectedWeeklyPlanId])
 
+  useEffect(() => {
+    if (dashboardLocationFilterIndex < dashboardLocationFilterOptions.length) {
+      return
+    }
+
+    setDashboardLocationFilterIndex(0)
+  }, [dashboardLocationFilterIndex, dashboardLocationFilterOptions.length])
+
+  useEffect(() => {
+    setIsReceiverSignatureCleared(false)
+  }, [activeDriverDispatch.id, currentTripPlan?.id])
+
   return (
       <div className="h-screen w-full bg-slate-50 text-slate-900">
         <div className="flex h-full w-full overflow-hidden bg-white">
@@ -3359,24 +3523,31 @@ function App() {
 
                 <button
                   type="button"
+                  onClick={cycleDashboardDateFilter}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
                 >
                   <CalendarDays className="h-4 w-4 text-slate-400" />
-                  Last 7 days
+                  {dashboardDateFilterLabel}
                   <ChevronDown className="h-4 w-4 text-slate-500" />
                 </button>
 
                 <button
                   type="button"
+                  onClick={cycleDashboardLocationFilter}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
                 >
                   <MapPinned className="h-4 w-4 text-slate-400" />
-                  All Locations
+                  {dashboardLocationFilterLabel}
                   <ChevronDown className="h-4 w-4 text-slate-500" />
                 </button>
 
                 <div className="ml-auto flex items-center gap-4">
-                  <button type="button" className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection('settings')}
+                    className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100"
+                    aria-label="Open notification preferences"
+                  >
                     <Bell className="h-5 w-5" />
                     <span className="absolute right-1 top-1 block h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white"></span>
                   </button>
@@ -3491,20 +3662,80 @@ function App() {
                           <p className="mt-0.5 text-[0.74rem] font-semibold text-slate-500">{activeDashboardRouteLabel}</p>
                         </div>
                         <div className="flex items-center rounded-xl bg-slate-100 p-1">
-                          <button type="button" className="rounded-lg bg-white px-3 py-1.5 text-[0.72rem] font-bold text-slate-700 shadow-sm">Map View</button>
-                          <button type="button" className="rounded-lg px-3 py-1.5 text-[0.72rem] font-bold text-slate-500">Grid View</button>
+                          <button
+                            type="button"
+                            onClick={() => setDashboardRouteViewMode('map')}
+                            className={`rounded-lg px-3 py-1.5 text-[0.72rem] font-bold ${dashboardRouteViewMode === 'map' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            Map View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDashboardRouteViewMode('grid')}
+                            className={`rounded-lg px-3 py-1.5 text-[0.72rem] font-bold ${dashboardRouteViewMode === 'grid' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            Grid View
+                          </button>
                         </div>
                       </div>
 
                       <div className="relative p-3 sm:p-4">
                         <div className="h-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                          <iframe
-                            title="Direct Google Maps Route"
-                            className="h-full w-full border-0"
-                            loading="lazy"
-                            src={dashboardDirectGoogleMapsUrl}
-                            referrerPolicy="no-referrer-when-downgrade"
-                          />
+                          {dashboardRouteViewMode === 'map' ? (
+                            <iframe
+                              title="Direct Google Maps Route"
+                              className="h-full w-full border-0"
+                              loading="lazy"
+                              src={dashboardDirectGoogleMapsUrl}
+                              referrerPolicy="no-referrer-when-downgrade"
+                            />
+                          ) : (
+                            <div className="dashboard-scrollbar h-full overflow-y-auto bg-slate-50 p-4">
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <article className="rounded-xl border border-slate-200 bg-white p-3">
+                                  <p className="text-[0.58rem] font-bold uppercase tracking-[0.08em] text-slate-500">Origin</p>
+                                  <p className="mt-1 text-[0.78rem] font-black text-slate-900">{activeDashboardOrder?.origin ?? activeDriverDispatch.origin}</p>
+                                </article>
+                                <article className="rounded-xl border border-slate-200 bg-white p-3">
+                                  <p className="text-[0.58rem] font-bold uppercase tracking-[0.08em] text-slate-500">ETA</p>
+                                  <p className="mt-1 text-[0.78rem] font-black text-slate-900">{dashboardRouteMeta.duration}</p>
+                                </article>
+                                <article className="rounded-xl border border-slate-200 bg-white p-3">
+                                  <p className="text-[0.58rem] font-bold uppercase tracking-[0.08em] text-slate-500">Destination</p>
+                                  <p className="mt-1 text-[0.78rem] font-black text-slate-900">{activeDashboardOrder?.destination ?? activeDriverDispatch.destination}</p>
+                                </article>
+                              </div>
+
+                              <div className="mt-4 space-y-2.5">
+                                {[
+                                  {
+                                    id: 'pickup',
+                                    label: 'Pickup',
+                                    location: activeDashboardOrder?.origin ?? activeDriverDispatch.origin,
+                                    window: `${activeDriverDispatch.pickupDate} | ${activeDriverDispatch.pickupTime}`,
+                                  },
+                                  {
+                                    id: 'break',
+                                    label: 'Planned Break',
+                                    location: hosPlanner.recommendedStop,
+                                    window: `Break due in ${formatHoursAndMinutes(hosPlanner.breakDueHours)}`,
+                                  },
+                                  {
+                                    id: 'delivery',
+                                    label: 'Delivery',
+                                    location: activeDashboardOrder?.destination ?? activeDriverDispatch.destination,
+                                    window: `${activeDriverDispatch.deliveryDate} | ${activeDriverDispatch.deliveryTime}`,
+                                  },
+                                ].map((checkpoint) => (
+                                  <div key={checkpoint.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                                    <p className="text-[0.6rem] font-bold uppercase tracking-[0.08em] text-slate-500">{checkpoint.label}</p>
+                                    <p className="mt-1 text-[0.78rem] font-black text-slate-900">{checkpoint.location}</p>
+                                    <p className="mt-0.5 text-[0.7rem] font-semibold text-slate-500">{checkpoint.window}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {isRouteLoading ? (
@@ -3535,7 +3766,11 @@ function App() {
                     <article className="relative rounded-3xl border border-slate-200 bg-white shadow-[0_20px_44px_-34px_rgba(15,23,42,0.5)]">
                       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3.5">
                         <h2 className="text-[1.56rem] font-black tracking-tight text-slate-900">Today's Driver Dispatch</h2>
-                        <button type="button" className="inline-flex items-center gap-1 text-[0.82rem] font-bold text-blue-600 hover:text-blue-700">
+                        <button
+                          type="button"
+                          onClick={focusDashboardSchedule}
+                          className="inline-flex items-center gap-1 text-[0.82rem] font-bold text-blue-600 hover:text-blue-700"
+                        >
                           View Schedule
                           <ArrowRight className="h-3.5 w-3.5" />
                         </button>
@@ -3594,10 +3829,18 @@ function App() {
                           </div>
 
                           <div className="mt-3 flex items-center justify-center gap-3">
-                            <button type="button" className="inline-flex rounded-lg bg-blue-600 px-4 py-2 text-[0.8rem] font-bold text-white hover:bg-blue-700">
+                            <button
+                              type="button"
+                              onClick={handleOpenDispatchNavigation}
+                              className="inline-flex rounded-lg bg-blue-600 px-4 py-2 text-[0.8rem] font-bold text-white hover:bg-blue-700"
+                            >
                               Open Navigation
                             </button>
-                            <button type="button" className="inline-flex rounded-lg bg-slate-100 px-4 py-2 text-[0.8rem] font-bold text-slate-700 hover:bg-slate-200">
+                            <button
+                              type="button"
+                              onClick={handleContactDispatcher}
+                              className="inline-flex rounded-lg bg-slate-100 px-4 py-2 text-[0.8rem] font-bold text-slate-700 hover:bg-slate-200"
+                            >
                               Contact Dispatch
                             </button>
                           </div>
@@ -3615,6 +3858,7 @@ function App() {
                         </div>
                         <button
                           type="button"
+                          onClick={handleRequestHomeTime}
                           className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-[0.72rem] font-bold uppercase tracking-[0.08em] text-blue-700 hover:bg-blue-100"
                         >
                           Request Home Time
@@ -3738,7 +3982,11 @@ function App() {
                                 <p className="mt-1 text-[0.74rem] font-semibold text-slate-700">{hosPlanner.recommendedStop}</p>
                               </div>
 
-                              <button type="button" className="mt-3 w-full rounded-xl border border-slate-200 bg-white py-2 text-[0.68rem] font-bold uppercase tracking-[0.08em] text-slate-700 hover:bg-slate-100">
+                              <button
+                                type="button"
+                                onClick={handlePlanBreakStop}
+                                className="mt-3 w-full rounded-xl border border-slate-200 bg-white py-2 text-[0.68rem] font-bold uppercase tracking-[0.08em] text-slate-700 hover:bg-slate-100"
+                              >
                                 Plan Break Stop
                               </button>
                             </article>
@@ -3770,7 +4018,11 @@ function App() {
                                 ))}
                               </ul>
 
-                              <button type="button" className="mt-3 w-full rounded-xl border border-slate-200 bg-white py-2 text-[0.68rem] font-bold uppercase tracking-[0.08em] text-slate-700 hover:bg-slate-100">
+                              <button
+                                type="button"
+                                onClick={handleOpenDriverChecklist}
+                                className="mt-3 w-full rounded-xl border border-slate-200 bg-white py-2 text-[0.68rem] font-bold uppercase tracking-[0.08em] text-slate-700 hover:bg-slate-100"
+                              >
                                 Open Checklist
                               </button>
                             </article>
@@ -3882,6 +4134,7 @@ function App() {
                                 </button>
                                 <button
                                   type="submit"
+                                  onClick={() => setRoadCommunityFilter('All')}
                                   className="rounded-xl bg-slate-900 px-3 py-2 text-[0.62rem] font-black uppercase tracking-[0.08em] text-white hover:bg-slate-800"
                                 >
                                   Post Report
@@ -3996,6 +4249,7 @@ function App() {
 
                           <button
                             type="button"
+                            onClick={handleViewDriverPayoutHistory}
                             className="mt-5 w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-[0.7rem] font-bold uppercase tracking-[0.08em] text-slate-700 hover:bg-slate-100"
                           >
                             View Payout History
@@ -4005,6 +4259,7 @@ function App() {
                         <div className="space-y-3">
                           <button
                             type="button"
+                            onClick={handleEmergencyRoadside}
                             className="flex w-full items-center justify-center gap-2 rounded-3xl bg-rose-600 px-5 py-4 text-[0.84rem] font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_40px_-26px_rgba(225,29,72,0.8)] transition hover:bg-rose-700"
                           >
                             <AlertTriangle className="h-4 w-4" />
@@ -4023,7 +4278,13 @@ function App() {
                                 <span className="h-1.5 w-1.5 rounded-full bg-white/40"></span>
                                 <span className="h-1.5 w-1.5 rounded-full bg-white/40"></span>
                               </div>
-                              <button type="button" className="text-[0.64rem] font-bold uppercase tracking-[0.08em] text-blue-100 hover:text-white">Learn More</button>
+                              <button
+                                type="button"
+                                onClick={handleLearnSafetyTip}
+                                className="text-[0.64rem] font-bold uppercase tracking-[0.08em] text-blue-100 hover:text-white"
+                              >
+                                Learn More
+                              </button>
                             </div>
                           </article>
 
@@ -4038,10 +4299,20 @@ function App() {
                                 <p className="text-[0.66rem] font-semibold text-slate-500">Dedicated Dispatcher</p>
                               </div>
                               <div className="flex items-center gap-2">
-                                <button type="button" className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700">
+                                <button
+                                  type="button"
+                                  onClick={handleContactDispatcher}
+                                  className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                                  aria-label="Call dispatch support"
+                                >
                                   <Phone className="h-3.5 w-3.5" />
                                 </button>
-                                <button type="button" className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700">
+                                <button
+                                  type="button"
+                                  onClick={handleEmailDispatcher}
+                                  className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                                  aria-label="Email dispatch support"
+                                >
                                   <Mail className="h-3.5 w-3.5" />
                                 </button>
                               </div>
@@ -4260,6 +4531,7 @@ function App() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          onClick={handleSavePodDraftAction}
                           className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700"
                         >
                           <FileText className="h-4 w-4" />
@@ -4267,6 +4539,7 @@ function App() {
                         </button>
                         <button
                           type="button"
+                          onClick={handleSubmitPodToCompany}
                           className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white"
                         >
                           <Upload className="h-4 w-4" />
@@ -4661,14 +4934,26 @@ function App() {
                               <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                                 <div className="mb-4 flex items-center justify-between">
                                   <h4 className="text-[1.1rem] font-black text-slate-900">Receiver Signature</h4>
-                                  <button type="button" className="text-[0.72rem] font-bold uppercase tracking-[0.08em] text-rose-600">Clear Pad</button>
+                                  <button
+                                    type="button"
+                                    onClick={handleClearReceiverSignature}
+                                    className="text-[0.72rem] font-bold uppercase tracking-[0.08em] text-rose-600"
+                                  >
+                                    Clear Pad
+                                  </button>
                                 </div>
 
                                 <div className="relative h-40 rounded-xl border border-slate-200 bg-slate-50">
-                                  <svg className="absolute inset-0 h-full w-full" viewBox="0 0 500 200" preserveAspectRatio="none">
-                                    <path d="M55,140 Q110,45 165,130 T275,80 T385,120 T450,70" fill="none" stroke="#1e293b" strokeWidth="3" strokeLinecap="round" />
-                                  </svg>
-                                  <p className="absolute bottom-2 left-3 text-[0.68rem] italic text-slate-500">Sign within area above</p>
+                                  {isReceiverSignatureCleared ? (
+                                    <div className="absolute inset-0 grid place-items-center px-4 text-center">
+                                      <p className="text-[0.76rem] font-semibold text-slate-500">Signature pad cleared. Capture receiver signature again.</p>
+                                    </div>
+                                  ) : (
+                                    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 500 200" preserveAspectRatio="none">
+                                      <path d="M55,140 Q110,45 165,130 T275,80 T385,120 T450,70" fill="none" stroke="#1e293b" strokeWidth="3" strokeLinecap="round" />
+                                    </svg>
+                                  )}
+                                  <p className="absolute bottom-2 left-3 text-[0.68rem] italic text-slate-500">{isReceiverSignatureCleared ? 'Pad ready for new signature' : 'Sign within area above'}</p>
                                 </div>
 
                                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -4848,7 +5133,11 @@ function App() {
                                     <Mail className="h-3.5 w-3.5" />
                                     Email
                                   </a>
-                                  <button type="button" className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[0.74rem] font-bold text-slate-700">
+                                  <button
+                                    type="button"
+                                    onClick={handleQuickDispatchMessage}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[0.74rem] font-bold text-slate-700"
+                                  >
                                     <Bot className="h-3.5 w-3.5" />
                                     Quick Msg
                                   </button>
@@ -4876,7 +5165,12 @@ function App() {
                                 <h4 className="text-[1.05rem] font-black text-slate-900">Exception / Delay Reporting</h4>
                                 <div className="mt-3 grid grid-cols-2 gap-2">
                                   {exceptionTemplates.map((item) => (
-                                    <button key={item} type="button" className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-[0.7rem] font-bold text-slate-700 hover:bg-slate-100">
+                                    <button
+                                      key={item}
+                                      type="button"
+                                      onClick={() => handleExceptionTemplatePick(item)}
+                                      className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-[0.7rem] font-bold text-slate-700 hover:bg-slate-100"
+                                    >
                                       {item}
                                     </button>
                                   ))}
@@ -4917,11 +5211,19 @@ function App() {
                               </section>
 
                               <div className="space-y-3">
-                                <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-3 text-sm font-bold text-white">
+                                <button
+                                  type="button"
+                                  onClick={handleSubmitPodToCompany}
+                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-3 text-sm font-bold text-white"
+                                >
                                   Submit POD to Company
                                   <ArrowRight className="h-4 w-4" />
                                 </button>
-                                <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700">
+                                <button
+                                  type="button"
+                                  onClick={handleSavePodDraftAction}
+                                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+                                >
                                   Save POD Draft
                                 </button>
                               </div>
@@ -7217,6 +7519,22 @@ function App() {
                 )
               }
 
+              const handleRequestPayout = () => {
+                if (pendingPayments.length === 0) {
+                  window.alert('No pending payouts are available right now.')
+                  return
+                }
+
+                const nextPendingPayment = pendingPayments[0]
+                setSelectedInvoiceId(nextPendingPayment.id)
+                window.alert(`Payout request sent for ${nextPendingPayment.id}. Finance team will review and release funds.`)
+              }
+
+              const handleAddPayoutMethod = () => {
+                setActiveSection('settings')
+                setIsPayoutEditing(true)
+              }
+
               const renderPaymentRows = (payments) => {
                 return payments.map((payment) => {
                   const isPending = String(payment.status ?? '').toLowerCase() === 'pending'
@@ -7291,7 +7609,11 @@ function App() {
                               <Download className="h-4 w-4" />
                               Export Statement
                             </button>
-                            <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
+                            <button
+                              type="button"
+                              onClick={handleRequestPayout}
+                              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                            >
                               <Wallet className="h-4 w-4" />
                               Request Payout
                             </button>
@@ -7419,7 +7741,11 @@ function App() {
                                     <span className="rounded-full bg-emerald-100 px-2 py-1 text-[0.62rem] font-black uppercase tracking-[0.06em] text-emerald-700">{method.status}</span>
                                   </div>
                                 ))}
-                                <button type="button" className="mt-1 w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-[0.72rem] font-bold text-slate-600 hover:bg-slate-50">
+                                <button
+                                  type="button"
+                                  onClick={handleAddPayoutMethod}
+                                  className="mt-1 w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-[0.72rem] font-bold text-slate-600 hover:bg-slate-50"
+                                >
                                   Add Payout Method
                                 </button>
                               </div>

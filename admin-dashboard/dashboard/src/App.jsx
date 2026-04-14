@@ -1536,6 +1536,256 @@ function App() {
     triggerFileDownload('pod-report.csv', toCsv(rows), 'text/csv;charset=utf-8')
   }
 
+  const showActionMessage = (message) => {
+    window.alert(message)
+  }
+
+  const handleTopDateRangeClick = () => {
+    showActionMessage('Date range is currently set to the last 7 days.')
+  }
+
+  const handleTopLocationScopeClick = () => {
+    showActionMessage('Location scope is currently set to all locations.')
+  }
+
+  const handleOpenAlertsCenter = () => {
+    const activeAlerts = alerts.length
+    showActionMessage(`You have ${activeAlerts} active alert${activeAlerts === 1 ? '' : 's'}.`)
+  }
+
+  const handleQuickAction = (actionId) => {
+    if (actionId === 'create-load') {
+      setActiveSection('orders')
+      setSelectedOrderId(filteredOrders[0]?.id ?? orders[0]?.id ?? null)
+      showActionMessage('Load creation workspace opened.')
+      return
+    }
+
+    if (actionId === 'assign-driver') {
+      setActiveSection('dispatch')
+      showActionMessage('Dispatch board opened for driver assignment.')
+      return
+    }
+
+    if (actionId === 'generate-invoice') {
+      setActiveSection('billing')
+      showActionMessage('Billing section opened to generate invoice.')
+      return
+    }
+
+    if (actionId === 'plan-route') {
+      setActiveSection('routes')
+      showActionMessage('Routes and tracking section opened.')
+    }
+  }
+
+  const handlePrimaryBoardAction = () => {
+    if (activeSection === 'dispatch') {
+      showActionMessage('Auto-assignment run completed for visible dispatch loads.')
+      return
+    }
+
+    const targetShipment = selectedOrderId ?? filteredOrders[0]?.id ?? orders[0]?.id ?? 'orders-import'
+    handleOpenDocumentPicker(targetShipment)
+  }
+
+  const handleCreateLoadAction = () => {
+    setActiveSection('orders')
+    const nextOrder = filteredOrders[0]?.id ?? orders[0]?.id ?? null
+    if (nextOrder) {
+      setSelectedOrderId(nextOrder)
+    }
+    showActionMessage('Load board ready. Start by selecting a load card.')
+  }
+
+  const handleSendOrderNote = () => {
+    showActionMessage('Note sent to dispatch communication timeline.')
+  }
+
+  const handleImportFleetData = () => {
+    const targetShipment = selectedVehicle?.id ?? filteredFleet[0]?.id ?? 'fleet-import'
+    handleOpenDocumentPicker(targetShipment)
+  }
+
+  const handleScheduleMaintenance = () => {
+    const candidate = filteredFleet.find((vehicle) => vehicle.status === 'Maintenance') ?? filteredFleet[0] ?? null
+    if (candidate) {
+      setSelectedVehicle(candidate)
+    }
+    showActionMessage('Opened vehicle details for maintenance scheduling.')
+  }
+
+  const handleAddVehicle = () => {
+    setActiveSection('fleet')
+    showActionMessage('Vehicle onboarding flow opened in Fleet section.')
+  }
+
+  const handleFleetRowAction = (vehicle) => {
+    setSelectedVehicle(vehicle)
+    showActionMessage(`Opened quick actions for ${vehicle.plate}.`)
+  }
+
+  const handleImportDrivers = () => {
+    handleOpenDocumentPicker(selectedDriverId ?? filteredDrivers[0]?.id ?? 'driver-import')
+  }
+
+  const handleExportComplianceReport = () => {
+    const rows = filteredDrivers.map((driver) => ({
+      driverId: driver.id,
+      name: driver.name,
+      licenseType: driver.licenseType,
+      status: driver.status,
+      hosRisk: driver.hosRisk,
+      rating: driver.rating,
+    }))
+
+    triggerFileDownload('driver-compliance-report.csv', toCsv(rows), 'text/csv;charset=utf-8')
+  }
+
+  const handleAddDriver = () => {
+    setActiveSection('drivers')
+    showActionMessage('Driver onboarding flow opened in Driver Management.')
+  }
+
+  const handleDriverRowAction = (driver) => {
+    setSelectedDriverId(driver.id)
+    showActionMessage(`Opened quick actions for ${driver.name}.`)
+  }
+
+  const handleRouteOptimization = () => {
+    const prioritizedRoute = filteredRoutes.find((route) => route.status !== 'On-time') ?? filteredRoutes[0] ?? null
+    if (prioritizedRoute) {
+      setSelectedRouteId(prioritizedRoute.id)
+      showActionMessage(`Optimization suggestions loaded for ${prioritizedRoute.id}.`)
+      return
+    }
+
+    showActionMessage('No routes available for optimization right now.')
+  }
+
+  const handleSettingsShortcut = (message) => {
+    setActiveSection('settings')
+    showActionMessage(message)
+  }
+
+  const handleWarehouseShortcut = (message) => {
+    showActionMessage(message)
+  }
+
+  const handleBillingFiltersReset = () => {
+    setBillingCurrentPage(1)
+    setSelectedInvoiceId(null)
+    showActionMessage('Billing filters reset to defaults.')
+  }
+
+  const handleCreateInvoice = () => {
+    setSelectedInvoiceId(dashboardData.invoiceList?.[0]?.id ?? null)
+    showActionMessage('Invoice workspace opened. Select a customer to continue.')
+  }
+
+  const handleInvoiceRowView = (invoiceId) => {
+    setSelectedInvoiceId(invoiceId)
+  }
+
+  const handleInvoiceAction = (invoice) => {
+    if (!invoice) {
+      return
+    }
+
+    if (invoice.status === 'Overdue') {
+      showActionMessage(`Payment reminder sent for ${invoice.id}.`)
+      return
+    }
+
+    triggerFileDownload(
+      `${invoice.id.toLowerCase()}-summary.csv`,
+      toCsv([{
+        invoiceId: invoice.id,
+        customer: invoice.customerName,
+        amount: invoice.amount,
+        status: invoice.status,
+        dueDate: invoice.dueDate,
+      }]),
+      'text/csv;charset=utf-8'
+    )
+  }
+
+  const handleSendInvoice = (invoice) => {
+    if (!invoice) {
+      return
+    }
+
+    showActionMessage(`Invoice ${invoice.id} sent to ${invoice.customerName}.`)
+  }
+
+  const handlePodView = (loadId) => {
+    setSelectedPodLoadId(loadId)
+  }
+
+  const handlePodApprove = (loadId) => {
+    setSelectedPodLoadId(loadId)
+    showActionMessage(`POD for ${loadId} marked as approved in this session.`)
+  }
+
+  const reportExportRows = {
+    'on-time-performance': [
+      { metric: 'On-time Delivery', value: '94.2%' },
+      { metric: 'Delayed Deliveries', value: '5.8%' },
+      { metric: 'Average Delay', value: '23 minutes' },
+    ],
+    'delays-by-lane': [
+      { lane: 'Route 15', delays: '34', averageDelay: '2.9h' },
+      { lane: 'Route 7', delays: '19', averageDelay: '2.1h' },
+      { lane: 'Route 22', delays: '13', averageDelay: '1.4h' },
+    ],
+    'driver-performance': [
+      { metric: 'Average Rating', value: '4.8' },
+      { metric: 'Completion Rate', value: '96.7%' },
+      { metric: 'Active Drivers', value: '42' },
+    ],
+    'revenue-trends': [
+      { period: 'Week 1', revenue: '$412,000' },
+      { period: 'Week 2', revenue: '$438,000' },
+      { period: 'Week 3', revenue: '$451,000' },
+    ],
+    'margin-analysis': [
+      { lane: 'Chicago - Atlanta', margin: '18.4%' },
+      { lane: 'Dallas - Phoenix', margin: '21.1%' },
+      { lane: 'Miami - Jacksonville', margin: '26.3%' },
+    ],
+    accessorials: [
+      { type: 'Detention', amount: '$36,200' },
+      { type: 'Loading', amount: '$22,700' },
+      { type: 'Fuel Adjustment', amount: '$12,400' },
+    ],
+    'ar-aging': [
+      { bucket: 'Current', amount: '$413,000' },
+      { bucket: '1-30', amount: '$156,000' },
+      { bucket: '31-60', amount: '$88,000' },
+      { bucket: '61+', amount: '$72,000' },
+    ],
+  }
+
+  const handleReportExport = (reportId, format) => {
+    const normalizedReportId = String(reportId ?? '').trim() || 'report'
+    const rows = reportExportRows[normalizedReportId] ?? [{ report: normalizedReportId, value: 'Summary generated' }]
+
+    if (format === 'pdf') {
+      const content = rows
+        .map((row) => Object.entries(row).map(([key, value]) => `${key}: ${value}`).join(' | '))
+        .join('\n')
+
+      triggerFileDownload(`${normalizedReportId}-summary.txt`, content, 'text/plain;charset=utf-8')
+      return
+    }
+
+    triggerFileDownload(`${normalizedReportId}.csv`, toCsv(rows), 'text/csv;charset=utf-8')
+  }
+
+  const handleToggleAiSummary = (reportId) => {
+    showActionMessage(`AI summary refreshed for ${reportId}.`)
+  }
+
   useEffect(() => {
     if (!selectedOrder?.id) {
       return
@@ -1596,6 +1846,7 @@ function App() {
 
                 <button
                   type="button"
+                  onClick={handleTopDateRangeClick}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
                 >
                   <CalendarDays className="h-4 w-4 text-slate-400" />
@@ -1605,6 +1856,7 @@ function App() {
 
                 <button
                   type="button"
+                  onClick={handleTopLocationScopeClick}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
                 >
                   <MapPinned className="h-4 w-4 text-slate-400" />
@@ -1613,7 +1865,7 @@ function App() {
                 </button>
 
                 <div className="ml-auto flex items-center gap-4">
-                  <button type="button" className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
+                  <button type="button" onClick={handleOpenAlertsCenter} className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
                     <Bell className="h-5 w-5" />
                     <span className="absolute right-1 top-1 block h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white"></span>
                   </button>
@@ -1802,6 +2054,7 @@ function App() {
                           <button
                             key={action.id}
                             type="button"
+                            onClick={() => handleQuickAction(action.id)}
                             className={`inline-flex min-h-[72px] items-center justify-center gap-2.5 rounded-xl px-4 py-3 text-[0.95rem] font-bold text-white shadow-md transition ${action.style}`}
                           >
                             <Icon className="h-4 w-4" />
@@ -1829,6 +2082,7 @@ function App() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          onClick={handlePrimaryBoardAction}
                           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600"
                         >
                           {activeSection === 'dispatch' ? (
@@ -1845,6 +2099,7 @@ function App() {
                         </button>
                         <button
                           type="button"
+                          onClick={handleCreateLoadAction}
                           className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white"
                         >
                           <Plus className="h-4 w-4" />
@@ -2412,6 +2667,7 @@ function App() {
                                   />
                                   <button
                                     type="button"
+                                    onClick={handleSendOrderNote}
                                     className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500 text-white hover:bg-blue-600"
                                   >
                                     <ArrowRight className="h-4 w-4" />
@@ -2523,15 +2779,15 @@ function App() {
                       <h2 className="text-2xl font-bold tracking-tight text-slate-800">Fleet - Trucks & Trailers Management</h2>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
+                      <button type="button" onClick={handleImportFleetData} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
                         <Download className="h-4 w-4" />
                         Import Fleet Data
                       </button>
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 transition-colors">
+                      <button type="button" onClick={handleScheduleMaintenance} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 transition-colors">
                         <Wrench className="h-4 w-4" />
                         Schedule Maintenance
                       </button>
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
+                      <button type="button" onClick={handleAddVehicle} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
                         <Plus className="h-4 w-4" />
                         Add Vehicle
                       </button>
@@ -2708,7 +2964,14 @@ function App() {
                               </div>
                             </td>
                             <td className="px-6 py-4 text-center">
-                              <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleFleetRowAction(vehicle)
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                              >
                                 <MoreHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />
                               </button>
                             </td>
@@ -2856,15 +3119,15 @@ function App() {
                       <h2 className="text-2xl font-bold tracking-tight text-slate-800">Driver Management</h2>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
+                      <button type="button" onClick={handleImportDrivers} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
                         <Download className="h-4 w-4" />
                         Import Drivers
                       </button>
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 transition-colors">
+                      <button type="button" onClick={handleExportComplianceReport} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 transition-colors">
                         <ShieldCheck className="h-4 w-4" />
                         Compliance Report
                       </button>
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
+                      <button type="button" onClick={handleAddDriver} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
                         <Plus className="h-4 w-4" />
                         Add New Driver
                       </button>
@@ -3029,7 +3292,14 @@ function App() {
                               <div className="text-[0.72rem] text-slate-500 mt-0.5 pl-5">{driver.currentLocation.terminal}</div>
                             </td>
                             <td className="px-6 py-4 text-center">
-                              <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleDriverRowAction(driver)
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                              >
                                 <MoreHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />
                               </button>
                             </td>
@@ -3175,7 +3445,7 @@ function App() {
                         <Download className="h-4 w-4 text-slate-400" />
                         Export Data
                       </button>
-                      <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
+                      <button type="button" onClick={handleRouteOptimization} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
                         <Route className="h-4 w-4" />
                         Route Optimization
                       </button>
@@ -3531,7 +3801,10 @@ function App() {
                               </div>
                             </div>
                             
-                            <button className="flex items-center gap-1.5 px-3 py-2 text-sm font-bold text-blue-600 hover:text-blue-700 mt-2 transition-colors">
+                            <button
+                              onClick={() => handleSettingsShortcut('Branch creation flow opened.')}
+                              className="flex items-center gap-1.5 px-3 py-2 text-sm font-bold text-blue-600 hover:text-blue-700 mt-2 transition-colors"
+                            >
                               <Plus className="h-4 w-4" /> Add Branch
                             </button>
                           </div>
@@ -3629,7 +3902,10 @@ function App() {
                             </div>
                             <p className="text-[0.75rem] font-medium text-slate-400 mt-4 mb-3">Last sync: 2 minutes ago</p>
                           </div>
-                          <button className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                          <button
+                            onClick={() => handleSettingsShortcut('GPS Tracking integration settings opened.')}
+                            className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
                             Configure
                           </button>
                         </div>
@@ -3651,7 +3927,10 @@ function App() {
                             </div>
                             <p className="text-[0.75rem] font-medium text-slate-400 mt-4 mb-3">Last sync: 5 minutes ago</p>
                           </div>
-                          <button className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                          <button
+                            onClick={() => handleSettingsShortcut('ELD integration settings opened.')}
+                            className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
                             Configure
                           </button>
                         </div>
@@ -3673,7 +3952,10 @@ function App() {
                             </div>
                             <p className="text-[0.75rem] font-medium text-slate-400 mt-4 mb-3">Setup required</p>
                           </div>
-                          <button className="w-full rounded-xl bg-blue-600 px-4 py-2 text-[0.8rem] font-bold text-white hover:bg-blue-700 transition-colors">
+                          <button
+                            onClick={() => handleSettingsShortcut('Accounting integration onboarding opened.')}
+                            className="w-full rounded-xl bg-blue-600 px-4 py-2 text-[0.8rem] font-bold text-white hover:bg-blue-700 transition-colors"
+                          >
                             Connect
                           </button>
                         </div>
@@ -3695,7 +3977,10 @@ function App() {
                             </div>
                             <p className="text-[0.75rem] font-medium text-slate-400 mt-4 mb-3">Last sync: 1 hour ago</p>
                           </div>
-                          <button className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                          <button
+                            onClick={() => handleSettingsShortcut('Invoicing integration settings opened.')}
+                            className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
                             Configure
                           </button>
                         </div>
@@ -3717,7 +4002,10 @@ function App() {
                             </div>
                             <p className="text-[0.75rem] font-medium text-slate-400 mt-4 mb-3">Last sync: 15 minutes ago</p>
                           </div>
-                          <button className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors">
+                          <button
+                            onClick={() => handleSettingsShortcut('Weather API integration settings opened.')}
+                            className="w-full rounded-xl bg-slate-50 px-4 py-2 text-[0.8rem] font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
                             Configure
                           </button>
                         </div>
@@ -3739,7 +4027,10 @@ function App() {
                             </div>
                             <p className="text-[0.75rem] font-medium text-slate-400 mt-4 mb-3">Setup required</p>
                           </div>
-                          <button className="w-full rounded-xl bg-blue-600 px-4 py-2 text-[0.8rem] font-bold text-white hover:bg-blue-700 transition-colors">
+                          <button
+                            onClick={() => handleSettingsShortcut('Fuel card integration onboarding opened.')}
+                            className="w-full rounded-xl bg-blue-600 px-4 py-2 text-[0.8rem] font-bold text-white hover:bg-blue-700 transition-colors"
+                          >
                             Connect
                           </button>
                         </div>
@@ -3990,15 +4281,24 @@ function App() {
                             <h2 className="text-[1.65rem] font-bold tracking-tight text-slate-900">Warehouses / Hubs</h2>
                           </div>
                           <div className="flex items-center gap-4">
-                            <button className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 py-2 text-[0.85rem] font-bold text-slate-700 transition">
+                            <button
+                              onClick={() => handleSettingsShortcut('Warehouse settings opened.')}
+                              className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 py-2 text-[0.85rem] font-bold text-slate-700 transition"
+                            >
                               <Settings className="h-[14px] w-[14px] text-slate-500" strokeWidth={2.5} />
                               Settings
                             </button>
-                            <button className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 py-2 text-[0.85rem] font-bold text-slate-700 transition">
+                            <button
+                              onClick={() => setActiveSection('reports')}
+                              className="flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 py-2 text-[0.85rem] font-bold text-slate-700 transition"
+                            >
                               <BarChart3 className="h-[14px] w-[14px] text-slate-500" strokeWidth={2.5} />
                               View Analytics
                             </button>
-                            <button className="flex items-center gap-2 rounded-xl bg-[#3b82f6] px-5 py-2 text-[0.85rem] font-bold text-white transition hover:bg-blue-700 shadow-sm ml-1">
+                            <button
+                              onClick={() => handleWarehouseShortcut('New warehouse intake workflow opened.')}
+                              className="flex items-center gap-2 rounded-xl bg-[#3b82f6] px-5 py-2 text-[0.85rem] font-bold text-white transition hover:bg-blue-700 shadow-sm ml-1"
+                            >
                               <Plus className="h-[14px] w-[14px]" strokeWidth={2.5} />
                               Add New Warehouse
                             </button>
@@ -4046,17 +4346,29 @@ function App() {
                                 <option>All Capacities</option>
                               </select>
                             </div>
-                            <button className="text-[0.8rem] font-medium text-slate-400 hover:text-slate-600 transition ml-1 flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setSelectedWarehouseId(null)
+                                handleWarehouseShortcut('Warehouse filters reset.')
+                              }}
+                              className="text-[0.8rem] font-medium text-slate-400 hover:text-slate-600 transition ml-1 flex items-center gap-1"
+                            >
                               <X className="h-3 w-3" /> Clear Filters
                             </button>
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-[0.8rem] font-medium text-slate-500">View:</span>
                             <div className="flex items-center rounded-full bg-slate-100 p-1">
-                              <button className="flex items-center gap-1.5 rounded-full bg-[#3b82f6] px-3.5 py-1 text-[0.75rem] font-bold text-white shadow-sm">
+                              <button
+                                onClick={() => handleWarehouseShortcut('Card view is active for warehouse listing.')}
+                                className="flex items-center gap-1.5 rounded-full bg-[#3b82f6] px-3.5 py-1 text-[0.75rem] font-bold text-white shadow-sm"
+                              >
                                 <LayoutDashboard className="h-3.5 w-3.5" /> Cards
                               </button>
-                              <button className="flex items-center gap-1.5 rounded-full px-3.5 py-1 text-[0.75rem] font-bold text-slate-500 hover:text-slate-700 transition">
+                              <button
+                                onClick={() => handleWarehouseShortcut('Map view request captured for warehouses.')}
+                                className="flex items-center gap-1.5 rounded-full px-3.5 py-1 text-[0.75rem] font-bold text-slate-500 hover:text-slate-700 transition"
+                              >
                                 <Map className="h-3.5 w-3.5" /> Map
                               </button>
                             </div>
@@ -4145,7 +4457,10 @@ function App() {
                           <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4 sticky top-0 bg-white/95 backdrop-blur-sm z-20">
                             <h2 className="text-[1.1rem] font-bold tracking-tight text-slate-800">Warehouse Details</h2>
                             <div className="flex items-center gap-2">
-                              <button className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-[0.8rem] font-bold text-white transition hover:bg-blue-700 shadow-sm">
+                              <button
+                                onClick={() => handleWarehouseShortcut(`Manage panel opened for ${ws.name}.`)}
+                                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-[0.8rem] font-bold text-white transition hover:bg-blue-700 shadow-sm"
+                              >
                                 <Wrench className="h-3.5 w-3.5" /> Manage
                               </button>
                               <button
@@ -4415,13 +4730,22 @@ function App() {
                           <div className="h-px bg-slate-100 w-full" />
 
                           <div className="p-6 pb-8 space-y-3 mt-auto">
-                            <button className="w-full flex items-center justify-center rounded-xl bg-[#3b82f6] py-3.5 text-[0.9rem] tracking-tight font-bold text-white shadow-sm hover:bg-[#2563eb] transition-colors">
+                            <button
+                              onClick={() => setActiveSection('orders')}
+                              className="w-full flex items-center justify-center rounded-xl bg-[#3b82f6] py-3.5 text-[0.9rem] tracking-tight font-bold text-white shadow-sm hover:bg-[#2563eb] transition-colors"
+                            >
                               Manage Inventory
                             </button>
-                            <button className="w-full flex items-center justify-center rounded-xl bg-[#10b981] py-3.5 text-[0.9rem] tracking-tight font-bold text-white shadow-sm hover:bg-[#059669] transition-colors">
+                            <button
+                              onClick={() => handleWarehouseShortcut('Appointment scheduler opened for this warehouse.')}
+                              className="w-full flex items-center justify-center rounded-xl bg-[#10b981] py-3.5 text-[0.9rem] tracking-tight font-bold text-white shadow-sm hover:bg-[#059669] transition-colors"
+                            >
                               Schedule Appointment
                             </button>
-                            <button className="w-full flex items-center justify-center rounded-xl border border-slate-200 bg-white py-3.5 text-[0.9rem] tracking-tight font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
+                            <button
+                              onClick={() => setActiveSection('reports')}
+                              className="w-full flex items-center justify-center rounded-xl border border-slate-200 bg-white py-3.5 text-[0.9rem] tracking-tight font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+                            >
                               View Reports
                             </button>
                           </div>
@@ -4699,9 +5023,25 @@ function App() {
                                   </button>
                                 ) : load.actionLabel === 'View' ? (
                                   <div className="flex gap-2">
-                                    <button onClick={e => e.stopPropagation()} className={`relative z-10 rounded-xl px-4 py-1.5 text-[0.75rem] font-bold transition ${load.actionTone}`}>{load.actionLabel}</button>
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        handlePodView(load.id)
+                                      }}
+                                      className={`relative z-10 rounded-xl px-4 py-1.5 text-[0.75rem] font-bold transition ${load.actionTone}`}
+                                    >
+                                      {load.actionLabel}
+                                    </button>
                                     {load.secondAction && (
-                                      <button onClick={e => e.stopPropagation()} className={`relative z-10 rounded-xl px-3.5 py-1.5 font-bold text-[0.75rem] transition ${load.secondTone}`}>{load.secondAction}</button>
+                                      <button
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          handlePodApprove(load.id)
+                                        }}
+                                        className={`relative z-10 rounded-xl px-3.5 py-1.5 font-bold text-[0.75rem] transition ${load.secondTone}`}
+                                      >
+                                        {load.secondAction}
+                                      </button>
                                     )}
                                   </div>
                                 ) : (
@@ -4758,7 +5098,10 @@ function App() {
                             <h2 className="text-[1.3rem] font-bold tracking-tight text-slate-900">{selLoad.id}</h2>
                           </div>
                           <div className="flex items-center gap-3">
-                            <button className="flex items-center gap-1.5 rounded-xl bg-[#10b981] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-[#059669] transition">
+                            <button
+                              onClick={() => handlePodApprove(selLoad.id)}
+                              className="flex items-center gap-1.5 rounded-xl bg-[#10b981] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-[#059669] transition"
+                            >
                               <Check className="h-4 w-4" strokeWidth={3} /> Approve
                             </button>
                             <button onClick={() => setSelectedPodLoadId(null)} className="flex items-center justify-center rounded-full bg-white border border-slate-200 w-8 h-8 text-slate-400 hover:text-slate-600 hover:bg-slate-50 shadow-sm transition">
@@ -4916,7 +5259,7 @@ function App() {
                           >
                             <Settings className="h-3.5 w-3.5" strokeWidth={2.5} /> Settings
                           </button>
-                          <button className="flex items-center gap-2 rounded-md bg-[#6082f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-600 transition-colors">
+                          <button onClick={handleCreateInvoice} className="flex items-center gap-2 rounded-md bg-[#6082f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-600 transition-colors">
                             <Plus className="h-4 w-4" strokeWidth={3} /> Create Invoice
                           </button>
                         </div>
@@ -4944,28 +5287,28 @@ function App() {
 
                       {/* Filters */}
                       <div className="flex items-center gap-3 mb-4 mt-5">
-                        <button className="flex items-center justify-between w-32 rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                        <button onClick={() => showActionMessage('Status filter menu opened.')} className="flex items-center justify-between w-32 rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                           All Status <ChevronDown className="h-3 w-3 text-slate-400" strokeWidth={3} />
                         </button>
-                        <button className="flex items-center justify-between w-[140px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                        <button onClick={() => showActionMessage('Customer filter menu opened.')} className="flex items-center justify-between w-[140px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                           All Customers <ChevronDown className="h-3 w-3 text-slate-400" strokeWidth={3} />
                         </button>
 
                         <div className="flex items-center gap-2">
-                          <button className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                          <button onClick={() => showActionMessage('Start date picker opened.')} className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                             11/01/2024 <CalendarDays className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
                           </button>
                           <span className="text-[0.8rem] font-medium text-slate-400">to</span>
-                          <button className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                          <button onClick={() => showActionMessage('End date picker opened.')} className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                             12/08/2024 <CalendarDays className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
                           </button>
                         </div>
 
-                        <button className="flex items-center justify-between w-28 rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                        <button onClick={() => showActionMessage('Aging filter menu opened.')} className="flex items-center justify-between w-28 rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                           All Aging <ChevronDown className="h-3 w-3 text-slate-400" strokeWidth={3} />
                         </button>
 
-                        <button className="text-[0.8rem] font-bold text-slate-400 ml-2 hover:text-slate-600">
+                        <button onClick={handleBillingFiltersReset} className="text-[0.8rem] font-bold text-slate-400 ml-2 hover:text-slate-600">
                           Clear Filters
                         </button>
                       </div>
@@ -5041,10 +5384,22 @@ function App() {
                                 </div>
 
                                 <div className="col-span-2 flex items-center justify-end gap-2 pr-2">
-                                  <button onClick={(e) => { e.stopPropagation() }} className="flex h-[34px] w-[34px] items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleInvoiceRowView(invoice.id)
+                                    }}
+                                    className="flex h-[34px] w-[34px] items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]"
+                                  >
                                     <Eye className="h-4 w-4" strokeWidth={2.5} />
                                   </button>
-                                  <button onClick={(e) => { e.stopPropagation() }} className={`flex h-[34px] w-[34px] items-center justify-center rounded-lg transition shadow-sm ${invoice.status === 'Paid' ? 'bg-[#f0fdf4] text-[#16a34a] hover:bg-[#dcfce7] border border-[#dcfce7]' : invoice.status === 'Overdue' ? 'bg-[#fff1f2] text-[#e11d48] hover:bg-[#ffe4e6] border border-[#ffe4e6]' : 'bg-[#f0fdf4] text-[#16a34a] hover:bg-[#dcfce7] border border-[#dcfce7]'}`}>
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleInvoiceAction(invoice)
+                                    }}
+                                    className={`flex h-[34px] w-[34px] items-center justify-center rounded-lg transition shadow-sm ${invoice.status === 'Paid' ? 'bg-[#f0fdf4] text-[#16a34a] hover:bg-[#dcfce7] border border-[#dcfce7]' : invoice.status === 'Overdue' ? 'bg-[#fff1f2] text-[#e11d48] hover:bg-[#ffe4e6] border border-[#ffe4e6]' : 'bg-[#f0fdf4] text-[#16a34a] hover:bg-[#dcfce7] border border-[#dcfce7]'}`}
+                                  >
                                     {invoice.status === 'Paid' || invoice.status === 'Pending' ? <Download className="h-4 w-4" strokeWidth={2.5} /> : <Mail className="h-4 w-4" strokeWidth={2.5} />}
                                   </button>
                                 </div>
@@ -5130,7 +5485,7 @@ function App() {
                             <h2 className="text-[1.3rem] font-bold tracking-tight text-slate-900">{selInvoice.id}</h2>
                           </div>
                           <div className="flex items-center gap-3">
-                            <button className="flex items-center gap-1.5 rounded-xl bg-[#3b82f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-700 transition">
+                            <button onClick={() => handleSendInvoice(selInvoice)} className="flex items-center gap-1.5 rounded-xl bg-[#3b82f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-700 transition">
                               <Mail className="h-4 w-4" strokeWidth={2.5} /> Send
                             </button>
                             <button onClick={() => setSelectedInvoiceId(null)} className="flex items-center justify-center rounded-full bg-white border border-slate-200 w-8 h-8 text-slate-400 hover:text-slate-600 hover:bg-slate-50 shadow-sm transition">
@@ -5347,7 +5702,7 @@ function App() {
                           >
                             <Download className="h-3.5 w-3.5" strokeWidth={2.5} /> Bulk Export
                           </button>
-                          <button className="flex items-center gap-2 rounded-md bg-[#6082f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-600 transition-colors">
+                          <button onClick={() => setSelectedReportId('on-time-performance')} className="flex items-center gap-2 rounded-md bg-[#6082f6] px-4 py-2 text-[0.85rem] font-bold text-white shadow-sm hover:bg-blue-600 transition-colors">
                             <Plus className="h-4 w-4" strokeWidth={3} /> Custom Report
                           </button>
                         </div>
@@ -5356,23 +5711,23 @@ function App() {
                       {/* Filters */}
                       <div className="flex items-center gap-3 mb-5 mt-5">
                         <div className="flex items-center gap-2">
-                          <button className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                          <button onClick={() => showActionMessage('Report start date picker opened.')} className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                             11/01/2024 <CalendarDays className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
                           </button>
                           <span className="text-[0.8rem] font-medium text-slate-400">to</span>
-                          <button className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                          <button onClick={() => showActionMessage('Report end date picker opened.')} className="flex items-center justify-between w-[130px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                             12/08/2024 <CalendarDays className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
                           </button>
                         </div>
 
-                        <button className="flex items-center justify-between w-[155px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                        <button onClick={() => showActionMessage('Department filter menu opened.')} className="flex items-center justify-between w-[155px] rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                           All Departments <ChevronDown className="h-3 w-3 text-slate-400" strokeWidth={3} />
                         </button>
-                        <button className="flex items-center justify-between w-28 rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
+                        <button onClick={() => showActionMessage('Report type filter menu opened.')} className="flex items-center justify-between w-28 rounded-full border border-slate-200 px-4 py-1.5 text-[0.8rem] font-bold text-slate-600 bg-white hover:bg-slate-50">
                           All Types <ChevronDown className="h-3 w-3 text-slate-400" strokeWidth={3} />
                         </button>
 
-                        <button className="text-[0.8rem] font-bold text-slate-400 ml-2 hover:text-slate-600">
+                        <button onClick={() => setSelectedReportId(null)} className="text-[0.8rem] font-bold text-slate-400 ml-2 hover:text-slate-600">
                           Clear Filters
                         </button>
                       </div>
@@ -5430,8 +5785,8 @@ function App() {
                           {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => e.stopPropagation()}>PDF</button>
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => e.stopPropagation()}>CSV</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('on-time-performance', 'pdf') }}>PDF</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('on-time-performance', 'csv') }}>CSV</button>
                             </div>
                             <button
                               className="text-[0.82rem] font-bold text-[#3b82f6] hover:underline"
@@ -5440,7 +5795,7 @@ function App() {
                               View Details
                             </button>
                           </div>
-                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => e.stopPropagation()}>Toggle AI Summary</button>
+                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => { e.stopPropagation(); handleToggleAiSummary('on-time-performance') }}>Toggle AI Summary</button>
                         </div>
 
                         {/* Delays by Lane */}
@@ -5505,8 +5860,8 @@ function App() {
                           {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => e.stopPropagation()}>PDF</button>
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => e.stopPropagation()}>CSV</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('delays-by-lane', 'pdf') }}>PDF</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('delays-by-lane', 'csv') }}>CSV</button>
                             </div>
                             <button
                               className="text-[0.82rem] font-bold text-[#3b82f6] hover:underline"
@@ -5515,7 +5870,7 @@ function App() {
                               View Details
                             </button>
                           </div>
-                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => e.stopPropagation()}>Toggle AI Summary</button>
+                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => { e.stopPropagation(); handleToggleAiSummary('delays-by-lane') }}>Toggle AI Summary</button>
                         </div>
 
                         {/* Driver Performance */}
@@ -5577,8 +5932,8 @@ function App() {
                           {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => e.stopPropagation()}>PDF</button>
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => e.stopPropagation()}>CSV</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('driver-performance', 'pdf') }}>PDF</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('driver-performance', 'csv') }}>CSV</button>
                             </div>
                             <button
                               className="text-[0.82rem] font-bold text-[#3b82f6] hover:underline"
@@ -5587,7 +5942,7 @@ function App() {
                               View Details
                             </button>
                           </div>
-                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => e.stopPropagation()}>Toggle AI Summary</button>
+                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => { e.stopPropagation(); handleToggleAiSummary('driver-performance') }}>Toggle AI Summary</button>
                         </div>
                       </div>
                     </div>
@@ -5662,8 +6017,8 @@ function App() {
                           {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => e.stopPropagation()}>PDF</button>
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => e.stopPropagation()}>CSV</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('revenue-trends', 'pdf') }}>PDF</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('revenue-trends', 'csv') }}>CSV</button>
                             </div>
                             <button
                               className="text-[0.82rem] font-bold text-[#3b82f6] hover:underline"
@@ -5672,7 +6027,7 @@ function App() {
                               View Details
                             </button>
                           </div>
-                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => e.stopPropagation()}>Toggle AI Summary</button>
+                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => { e.stopPropagation(); handleToggleAiSummary('revenue-trends') }}>Toggle AI Summary</button>
                         </div>
 
                         {/* Margin Analysis */}
@@ -5738,8 +6093,8 @@ function App() {
                           {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => e.stopPropagation()}>PDF</button>
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => e.stopPropagation()}>CSV</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('margin-analysis', 'pdf') }}>PDF</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('margin-analysis', 'csv') }}>CSV</button>
                             </div>
                             <button
                               className="text-[0.82rem] font-bold text-[#3b82f6] hover:underline"
@@ -5748,7 +6103,7 @@ function App() {
                               View Details
                             </button>
                           </div>
-                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => e.stopPropagation()}>Toggle AI Summary</button>
+                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => { e.stopPropagation(); handleToggleAiSummary('margin-analysis') }}>Toggle AI Summary</button>
                         </div>
 
                         {/* Accessorials */}
@@ -5805,8 +6160,8 @@ function App() {
                           {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => e.stopPropagation()}>PDF</button>
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => e.stopPropagation()}>CSV</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('accessorials', 'pdf') }}>PDF</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('accessorials', 'csv') }}>CSV</button>
                             </div>
                             <button
                               className="text-[0.82rem] font-bold text-[#3b82f6] hover:underline"
@@ -5815,7 +6170,7 @@ function App() {
                               View Details
                             </button>
                           </div>
-                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => e.stopPropagation()}>Toggle AI Summary</button>
+                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => { e.stopPropagation(); handleToggleAiSummary('accessorials') }}>Toggle AI Summary</button>
                         </div>
                       </div>
                     </div>
@@ -5878,8 +6233,8 @@ function App() {
                           {/* Actions */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => e.stopPropagation()}>PDF</button>
-                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => e.stopPropagation()}>CSV</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#ef4444] text-white text-[0.65rem] font-bold shadow-sm hover:bg-red-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('ar-aging', 'pdf') }}>PDF</button>
+                              <button className="flex h-8 w-10 items-center justify-center rounded-lg bg-[#22c55e] text-white text-[0.65rem] font-bold shadow-sm hover:bg-green-600 transition" onClick={(e) => { e.stopPropagation(); handleReportExport('ar-aging', 'csv') }}>CSV</button>
                             </div>
                             <button
                               className="text-[0.82rem] font-bold text-[#3b82f6] hover:underline"
@@ -5888,7 +6243,7 @@ function App() {
                               View Details
                             </button>
                           </div>
-                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => e.stopPropagation()}>Toggle AI Summary</button>
+                          <button className="mt-3 text-[0.78rem] font-medium text-slate-400 hover:text-slate-600 transition w-full text-center" onClick={(e) => { e.stopPropagation(); handleToggleAiSummary('ar-aging') }}>Toggle AI Summary</button>
                         </div>
                       </div>
                     </div>
@@ -5907,13 +6262,13 @@ function App() {
                           <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100">
                             <h2 className="text-[1.1rem] font-bold text-slate-800 tracking-tight">On-time Performance - Detailed View</h2>
                             <div className="flex items-center gap-3">
-                              <button className="flex h-9 items-center gap-2 px-4 rounded-lg bg-[#cc4444] text-white text-[0.78rem] font-bold shadow-sm hover:bg-red-700 transition-all">
+                              <button onClick={() => handleReportExport(selectedReportId, 'pdf')} className="flex h-9 items-center gap-2 px-4 rounded-lg bg-[#cc4444] text-white text-[0.78rem] font-bold shadow-sm hover:bg-red-700 transition-all">
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                                 PDF
                               </button>
-                              <button className="flex h-9 items-center gap-2 px-4 rounded-lg bg-[#55b078] text-white text-[0.78rem] font-bold shadow-sm hover:bg-green-700 transition-all">
+                              <button onClick={() => handleReportExport(selectedReportId, 'csv')} className="flex h-9 items-center gap-2 px-4 rounded-lg bg-[#55b078] text-white text-[0.78rem] font-bold shadow-sm hover:bg-green-700 transition-all">
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
