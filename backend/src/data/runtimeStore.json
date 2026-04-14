@@ -1,0 +1,79 @@
+{
+  "driverLocation": {
+    "latest": {
+      "id": "loc-1776184035983",
+      "shipmentId": "LOAD-2026-2209",
+      "loadId": "LOAD-2026-2209",
+      "driver": "Alex Rivera",
+      "latitude": 30.2688,
+      "longitude": -97.7426,
+      "speedMph": 41,
+      "recordedAt": "2026-04-14T16:27:15.983Z",
+      "source": "current-shipment",
+      "receivedAt": "2026-04-14T16:27:15.983Z"
+    },
+    "history": [
+      {
+        "id": "loc-1776184035983",
+        "shipmentId": "LOAD-2026-2209",
+        "loadId": "LOAD-2026-2209",
+        "driver": "Alex Rivera",
+        "latitude": 30.2688,
+        "longitude": -97.7426,
+        "speedMph": 41,
+        "recordedAt": "2026-04-14T16:27:15.983Z",
+        "source": "current-shipment",
+        "receivedAt": "2026-04-14T16:27:15.983Z"
+      },
+      {
+        "id": "loc-1776179875582",
+        "shipmentId": "LOAD-TEST-1",
+        "loadId": "LOAD-TEST-1",
+        "driver": "Test Driver",
+        "latitude": 28.6139,
+        "longitude": 77.209,
+        "speedMph": 0,
+        "recordedAt": "2026-04-14T15:17:55.582Z",
+        "source": "current-shipment",
+        "receivedAt": "2026-04-14T15:17:55.582Z"
+      }
+    ]
+  },
+  "driverMessage": {
+    "latest": {
+      "id": "msg-1776184036545",
+      "shipmentId": "LOAD-2026-2209",
+      "loadId": "LOAD-2026-2209",
+      "driver": "Alex Rivera",
+      "message": "Reached downtown checkpoint",
+      "category": "route",
+      "priority": "normal",
+      "sentAt": "2026-04-14T16:27:16.545Z",
+      "receivedAt": "2026-04-14T16:27:16.545Z"
+    },
+    "history": [
+      {
+        "id": "msg-1776184036545",
+        "shipmentId": "LOAD-2026-2209",
+        "loadId": "LOAD-2026-2209",
+        "driver": "Alex Rivera",
+        "message": "Reached downtown checkpoint",
+        "category": "route",
+        "priority": "normal",
+        "sentAt": "2026-04-14T16:27:16.545Z",
+        "receivedAt": "2026-04-14T16:27:16.545Z"
+      },
+      {
+        "id": "msg-1776179875589",
+        "shipmentId": "LOAD-TEST-1",
+        "loadId": "LOAD-TEST-1",
+        "driver": "Test Driver",
+        "message": "Reached waypoint",
+        "category": "general",
+        "priority": "normal",
+        "sentAt": "2026-04-14T15:17:55.589Z",
+        "receivedAt": "2026-04-14T15:17:55.589Z"
+      }
+    ]
+  }
+}
