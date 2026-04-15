@@ -1,5 +1,6 @@
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
+import PlatformGateway from "@/components/PlatformGateway";
 import MarqueeBanner from "@/components/MarqueeBanner";
 import SwipeManifesto from "@/components/SwipeManifesto";
 import Truth from "@/components/Truth";
@@ -18,6 +19,7 @@ export default function Home() {
       <Navbar />
       <div className="pt-16"><MarqueeBanner variant="dark" /></div>
       <Hero />
+      <PlatformGateway />
       <SwipeManifesto />
       <Truth />
       <HowItWorks />

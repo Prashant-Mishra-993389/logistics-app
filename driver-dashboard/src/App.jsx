@@ -1052,6 +1052,7 @@ function App() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null)
   const [walletPaymentHistory, setWalletPaymentHistory] = useState(() => fallbackData.paymentHistory ?? [])
   const [walletSelectedMonth, setWalletSelectedMonth] = useState('all')
+  const [walletActionMessage, setWalletActionMessage] = useState('')
   const [roadCommunityReports, setRoadCommunityReports] = useState(initialRoadCommunityReports)
   const [roadCommunityFilter, setRoadCommunityFilter] = useState('All')
   const [isRoadReportComposerOpen, setIsRoadReportComposerOpen] = useState(false)
@@ -1893,9 +1894,6 @@ function App() {
     return options
   }, [activeDriverDispatch.destination, activeDriverDispatch.origin])
 
-  const dashboardDateFilterLabel = DASHBOARD_DATE_FILTER_OPTIONS[dashboardDateFilterIndex] ?? DASHBOARD_DATE_FILTER_OPTIONS[0]
-  const dashboardLocationFilterLabel = dashboardLocationFilterOptions[dashboardLocationFilterIndex] ?? dashboardLocationFilterOptions[0]
-
   const bidPanelCompanyContact = useMemo(() => {
     return {
       dispatcher: dispatchDeskData.dispatcher,
@@ -1907,14 +1905,22 @@ function App() {
     }
   }, [currentTripPlan, dispatchDeskData.dispatcher, dispatchDeskData.email, dispatchDeskData.phone])
 
-  const cycleDashboardDateFilter = () => {
-    setDashboardDateFilterIndex((previousIndex) => (previousIndex + 1) % DASHBOARD_DATE_FILTER_OPTIONS.length)
+  const handleDashboardDateFilterChange = (event) => {
+    const nextIndex = Number.parseInt(event.target.value, 10)
+    if (!Number.isFinite(nextIndex)) {
+      return
+    }
+
+    setDashboardDateFilterIndex(Math.max(0, Math.min(nextIndex, DASHBOARD_DATE_FILTER_OPTIONS.length - 1)))
   }
 
-  const cycleDashboardLocationFilter = () => {
-    setDashboardLocationFilterIndex((previousIndex) => {
-      return (previousIndex + 1) % Math.max(dashboardLocationFilterOptions.length, 1)
-    })
+  const handleDashboardLocationFilterChange = (event) => {
+    const nextIndex = Number.parseInt(event.target.value, 10)
+    if (!Number.isFinite(nextIndex)) {
+      return
+    }
+
+    setDashboardLocationFilterIndex(Math.max(0, Math.min(nextIndex, Math.max(dashboardLocationFilterOptions.length - 1, 0))))
   }
 
   const focusDashboardSchedule = () => {
@@ -3294,15 +3300,229 @@ function App() {
     bidSheetInputRef.current?.click()
   }
 
-  const handleBidSheetSelection = (event) => {
+  const parseCsvBidRows = (rawText) => {
+    const source = String(rawText ?? '').replace(/^\uFEFF/, '')
+    const lines = source
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+
+    if (lines.length < 2) {
+      return []
+    }
+
+    const parseCsvLine = (line) => {
+      const values = []
+      let current = ''
+      let inQuotes = false
+
+      for (let index = 0; index < line.length; index += 1) {
+        const character = line[index]
+
+        if (character === '"') {
+          if (inQuotes && line[index + 1] === '"') {
+            current += '"'
+            index += 1
+          } else {
+            inQuotes = !inQuotes
+          }
+          continue
+        }
+
+        if (character === ',' && !inQuotes) {
+          values.push(current.trim())
+          current = ''
+          continue
+        }
+
+        current += character
+      }
+
+      values.push(current.trim())
+      return values
+    }
+
+    const headers = parseCsvLine(lines[0])
+
+    return lines.slice(1).map((line) => {
+      const columns = parseCsvLine(line)
+      const row = {}
+
+      headers.forEach((header, index) => {
+        row[header] = columns[index] ?? ''
+      })
+
+      return row
+    })
+  }
+
+  const normalizeBidImportKey = (value) => {
+    return String(value ?? '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '')
+  }
+
+  const readImportedBidValue = (row, aliases) => {
+    for (const alias of aliases) {
+      const candidate = row[alias]
+      if (candidate !== undefined && String(candidate).trim() !== '') {
+        return candidate
+      }
+    }
+
+    return ''
+  }
+
+  const parseImportedBidBoolean = (value, fallback = false) => {
+    if (typeof value === 'boolean') {
+      return value
+    }
+
+    const normalized = String(value ?? '').trim().toLowerCase()
+    if (!normalized) {
+      return fallback
+    }
+
+    if (['true', 'yes', 'y', '1'].includes(normalized)) {
+      return true
+    }
+
+    if (['false', 'no', 'n', '0'].includes(normalized)) {
+      return false
+    }
+
+    return fallback
+  }
+
+  const handleBidSheetSelection = async (event) => {
     const file = event.target.files?.[0]
     if (!file) {
       return
     }
 
-    setLastImportedBidSheet(file.name)
-    showBidActionMessage(`Imported ${file.name} successfully.`)
-    event.target.value = ''
+    try {
+      const normalizedName = String(file.name ?? '').toLowerCase()
+      const isCsv = normalizedName.endsWith('.csv')
+      const isJson = normalizedName.endsWith('.json')
+
+      if (!isCsv && !isJson) {
+        throw new Error('Only CSV and JSON bid sheets are supported in this dashboard build.')
+      }
+
+      const text = await file.text()
+      let importedRows = []
+
+      if (isJson) {
+        const parsed = JSON.parse(text)
+        if (Array.isArray(parsed)) {
+          importedRows = parsed
+        } else if (Array.isArray(parsed?.bids)) {
+          importedRows = parsed.bids
+        }
+      } else {
+        importedRows = parseCsvBidRows(text)
+      }
+
+      const nonEmptyRows = importedRows
+        .filter((row) => row && typeof row === 'object')
+        .filter((row) => Object.values(row).some((value) => String(value ?? '').trim() !== ''))
+
+      if (nonEmptyRows.length === 0) {
+        throw new Error('No bid rows were found in the selected file.')
+      }
+
+      const templateBid = selectedBid ?? filteredBids[0] ?? null
+      const importSeed = Date.now().toString().slice(-6)
+      const importedBids = nonEmptyRows.slice(0, 25).map((rawRow, index) => {
+        const normalizedRow = Object.entries(rawRow).reduce((accumulator, [key, value]) => {
+          accumulator[normalizeBidImportKey(key)] = value
+          return accumulator
+        }, {})
+
+        const rowIndexLabel = String(index + 1).padStart(2, '0')
+        const portalSchedule = buildPortalBidSchedule(portalBidSeedTime, orders.length + manualBids.length + index + 1)
+        const sourceLoadId = String(readImportedBidValue(normalizedRow, ['sourceloadid', 'loadid', 'loadcode']) || `IMPORTED-LOAD-${importSeed}-${rowIndexLabel}`).trim()
+        const customerName = String(readImportedBidValue(normalizedRow, ['customername', 'customer', 'client']) || templateBid?.customerName || 'Imported Account').trim()
+        const origin = String(readImportedBidValue(normalizedRow, ['origin', 'pickupcity']) || templateBid?.origin || 'Unknown Origin').trim()
+        const destination = String(readImportedBidValue(normalizedRow, ['destination', 'deliverycity']) || templateBid?.destination || 'Unknown Destination').trim()
+        const lane = String(readImportedBidValue(normalizedRow, ['lane']) || `${origin} -> ${destination}`).trim()
+        const laneMiles = Math.max(50, parseNumericValue(readImportedBidValue(normalizedRow, ['lanemiles', 'miles', 'distance'])) || templateBid?.laneMiles || 280)
+        const askRate = Math.max(300, Math.round(parseNumericValue(readImportedBidValue(normalizedRow, ['askrate', 'ask', 'bidrate', 'rate'])) || templateBid?.askRate || 1850))
+        const floorRate = Math.max(250, Math.round(parseNumericValue(readImportedBidValue(normalizedRow, ['floorrate', 'floor', 'minrate'])) || (askRate * 0.9)))
+        const equipment = String(readImportedBidValue(normalizedRow, ['equipment', 'trucktype']) || templateBid?.equipment || activeDriverDispatch.loadType || 'Dry Van').trim()
+        const urgency = String(readImportedBidValue(normalizedRow, ['urgency', 'priority']) || templateBid?.urgency || 'Medium').trim()
+        const bidType = String(readImportedBidValue(normalizedRow, ['bidtype', 'type']) || 'Manual').trim()
+        const region = String(readImportedBidValue(normalizedRow, ['region']) || templateBid?.region || 'US').trim()
+        const weightLbs = Math.max(1000, Math.round(parseNumericValue(readImportedBidValue(normalizedRow, ['weightlbs', 'weight'])) || templateBid?.weightLbs || 16000))
+        const requiresHazmat = parseImportedBidBoolean(readImportedBidValue(normalizedRow, ['requireshazmat', 'hazmat']), templateBid?.requiresHazmat ?? false)
+        const temperatureControl = parseImportedBidBoolean(readImportedBidValue(normalizedRow, ['temperaturecontrol', 'reefer']), templateBid?.temperatureControl ?? false)
+        const requiresTeamDriver = parseImportedBidBoolean(readImportedBidValue(normalizedRow, ['requiresteamdriver', 'teamdriver']), templateBid?.requiresTeamDriver ?? false)
+        const commodity = String(readImportedBidValue(normalizedRow, ['commodity']) || templateBid?.commodity || 'General merchandise pallets').trim()
+        const handlingNotes = String(readImportedBidValue(normalizedRow, ['handlingnotes', 'notes', 'note']) || templateBid?.handlingNotes || 'Driver assist unloading expected').trim()
+        const pickupWindow = String(readImportedBidValue(normalizedRow, ['pickupwindow', 'pickup']) || templateBid?.pickupWindow || `${activeDriverDispatch.pickupDate} | ${activeDriverDispatch.pickupTime}`).trim()
+        const deliveryWindow = String(readImportedBidValue(normalizedRow, ['deliverywindow', 'delivery']) || templateBid?.deliveryWindow || `${activeDriverDispatch.deliveryDate} | ${activeDriverDispatch.deliveryTime}`).trim()
+        const rpm = laneMiles > 0 ? askRate / laneMiles : 0
+        const score = Math.max(55, Math.min(96, Math.round((rpm * 42) + (urgency === 'High' ? 14 : urgency === 'Medium' ? 8 : 2))))
+
+        return {
+          id: `BID-IMP-${importSeed}-${rowIndexLabel}`,
+          sourceLoadId,
+          customerName,
+          lane,
+          origin,
+          destination,
+          pickupWindow,
+          deliveryWindow,
+          laneMiles,
+          askRate,
+          floorRate,
+          rpm,
+          urgency,
+          bidType,
+          equipment,
+          region,
+          portalPublishedAt: portalSchedule.portalPublishedAt,
+          biddingStartAt: portalSchedule.biddingStartAt,
+          biddingEndAt: portalSchedule.biddingEndAt,
+          score,
+          weightLbs,
+          dimensions: templateBid?.dimensions ?? '53 ft x 8.5 ft x 9 ft',
+          lengthFt: templateBid?.lengthFt ?? 53,
+          widthFt: templateBid?.widthFt ?? 8.5,
+          heightFt: templateBid?.heightFt ?? 9,
+          palletCount: templateBid?.palletCount ?? Math.max(8, Math.round(weightLbs / 2100)),
+          pieceCount: templateBid?.pieceCount ?? Math.max(120, Math.round(weightLbs / 95)),
+          commodity,
+          handlingNotes,
+          requiresHazmat,
+          temperatureControl,
+          requiresTeamDriver,
+          loadPhotos: templateBid?.loadPhotos ?? [
+            { id: `import-${rowIndexLabel}-dock`, label: 'Dock View', url: buildLoadPhoto('Imported Bid Dock View', '#2563eb') },
+            { id: `import-${rowIndexLabel}-cargo`, label: 'Inside Cargo', url: buildLoadPhoto('Imported Bid Cargo', '#0f766e') },
+            { id: `import-${rowIndexLabel}-seal`, label: 'Seal & Label', url: buildLoadPhoto('Imported Bid Seal Check', '#7c3aed') },
+          ],
+          note: `Imported from ${file.name}.`,
+        }
+      })
+
+      if (importedBids.length === 0) {
+        throw new Error('No valid bid rows were mapped from the selected file.')
+      }
+
+      setManualBids((previous) => [...importedBids, ...previous])
+      setSelectedBidId(importedBids[0].id)
+      setBidDetailsTab('Overview')
+      setIsBidDetailsPanelOpen(true)
+      setLastImportedBidSheet(file.name)
+      showBidActionMessage(`Imported ${importedBids.length} bid${importedBids.length === 1 ? '' : 's'} from ${file.name}.`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to import bid sheet.'
+      showBidActionMessage(message)
+    } finally {
+      event.target.value = ''
+    }
   }
 
   const handleCreateManualBid = () => {
@@ -3428,6 +3648,20 @@ function App() {
   }, [bidActionMessage])
 
   useEffect(() => {
+    if (!walletActionMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setWalletActionMessage('')
+    }, 3200)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [walletActionMessage])
+
+  useEffect(() => {
     if (activeSection !== 'drivers' && isBidDetailsPanelOpen) {
       setIsBidDetailsPanelOpen(false)
     }
@@ -3521,25 +3755,35 @@ function App() {
                   />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={cycleDashboardDateFilter}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
-                >
+                <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
                   <CalendarDays className="h-4 w-4 text-slate-400" />
-                  {dashboardDateFilterLabel}
+                  <select
+                    value={dashboardDateFilterIndex}
+                    onChange={handleDashboardDateFilterChange}
+                    className="bg-transparent text-sm text-slate-700 focus:outline-none"
+                    aria-label="Dashboard date range"
+                  >
+                    {DASHBOARD_DATE_FILTER_OPTIONS.map((label, index) => (
+                      <option key={label} value={index}>{label}</option>
+                    ))}
+                  </select>
                   <ChevronDown className="h-4 w-4 text-slate-500" />
-                </button>
+                </label>
 
-                <button
-                  type="button"
-                  onClick={cycleDashboardLocationFilter}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
-                >
+                <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
                   <MapPinned className="h-4 w-4 text-slate-400" />
-                  {dashboardLocationFilterLabel}
+                  <select
+                    value={dashboardLocationFilterIndex}
+                    onChange={handleDashboardLocationFilterChange}
+                    className="bg-transparent text-sm text-slate-700 focus:outline-none"
+                    aria-label="Dashboard location scope"
+                  >
+                    {dashboardLocationFilterOptions.map((label, index) => (
+                      <option key={`${label}-${index}`} value={index}>{label}</option>
+                    ))}
+                  </select>
                   <ChevronDown className="h-4 w-4 text-slate-500" />
-                </button>
+                </label>
 
                 <div className="ml-auto flex items-center gap-4">
                   <button
@@ -5291,7 +5535,7 @@ function App() {
                       <input
                         ref={bidSheetInputRef}
                         type="file"
-                        accept=".csv,.xlsx,.xls,.json"
+                        accept=".csv,.json"
                         onChange={handleBidSheetSelection}
                         className="hidden"
                       />
@@ -7521,13 +7765,13 @@ function App() {
 
               const handleRequestPayout = () => {
                 if (pendingPayments.length === 0) {
-                  window.alert('No pending payouts are available right now.')
+                  setWalletActionMessage('No pending payouts are available right now.')
                   return
                 }
 
                 const nextPendingPayment = pendingPayments[0]
                 setSelectedInvoiceId(nextPendingPayment.id)
-                window.alert(`Payout request sent for ${nextPendingPayment.id}. Finance team will review and release funds.`)
+                setWalletActionMessage(`Payout request sent for ${nextPendingPayment.id}. Finance team will review and release funds.`)
               }
 
               const handleAddPayoutMethod = () => {
@@ -7621,6 +7865,11 @@ function App() {
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 px-6 pb-3 pt-1 md:grid-cols-3 lg:px-8">
+                          {walletActionMessage ? (
+                            <div className="md:col-span-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-[0.78rem] font-semibold text-blue-800">
+                              {walletActionMessage}
+                            </div>
+                          ) : null}
                           {walletStats.map((stat) => {
                             const IconComp = walletIconMap[stat.icon] ?? Wallet
                             let displayValue = stat.value

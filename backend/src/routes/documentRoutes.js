@@ -14,12 +14,53 @@ const documentRoutes = Router()
 
 documentRoutes.use(attachUserIfPresent)
 
+const maxDocumentUploadBytes = 10 * 1024 * 1024
+const allowedDocumentMimeTypes = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+])
+const allowedDocumentExtensions = new Set([
+  '.pdf',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.heic',
+  '.heif',
+])
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: maxDocumentUploadBytes,
   },
 })
+
+const uploadSingleDocument = (req, res, next) => {
+  upload.single('file')(req, res, (error) => {
+    if (!error) {
+      next()
+      return
+    }
+
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      res.status(413).json({
+        ok: false,
+        message: `File is too large. Maximum allowed size is ${Math.round(maxDocumentUploadBytes / (1024 * 1024))} MB.`,
+      })
+      return
+    }
+
+    next(error)
+  })
+}
 
 const cleanText = (value) => String(value ?? '').trim()
 
@@ -59,7 +100,15 @@ const safeFileName = (name) => {
   return String(name ?? 'file.bin').replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
-documentRoutes.post('/documents/upload', upload.single('file'), async (req, res, next) => {
+const hasAllowedDocumentType = (file) => {
+  const mimeType = String(file?.mimetype ?? '').toLowerCase()
+  const extensionMatch = String(file?.originalname ?? '').toLowerCase().match(/\.[a-z0-9]+$/)
+  const extension = extensionMatch ? extensionMatch[0] : ''
+
+  return allowedDocumentMimeTypes.has(mimeType) || allowedDocumentExtensions.has(extension)
+}
+
+documentRoutes.post('/documents/upload', uploadSingleDocument, async (req, res, next) => {
   try {
     if (!assertBackendsConfigured(res)) {
       return
@@ -69,6 +118,14 @@ documentRoutes.post('/documents/upload', upload.single('file'), async (req, res,
       res.status(400).json({
         ok: false,
         message: 'No file uploaded. Use multipart/form-data with field name file.',
+      })
+      return
+    }
+
+    if (!hasAllowedDocumentType(req.file)) {
+      res.status(415).json({
+        ok: false,
+        message: 'Unsupported file type. Upload PDF or image files only.',
       })
       return
     }
@@ -215,9 +272,14 @@ documentRoutes.get('/documents/:documentId/download-url', async (req, res, next)
 
     const expiresInSeconds = 60 * 15
 
+    const storageBucket = cleanText(row.storage_bucket) || env.supabaseStorageBucket
+    const downloadFileName = safeFileName(row.original_name)
+
     const { data, error } = await supabaseAdmin.storage
-      .from(row.storage_bucket)
-      .createSignedUrl(row.storage_path, expiresInSeconds)
+      .from(storageBucket)
+      .createSignedUrl(row.storage_path, expiresInSeconds, {
+        download: downloadFileName,
+      })
 
     if (error || !data?.signedUrl) {
       throw new Error(`Failed to create signed URL: ${error?.message ?? 'unknown error'}`)
@@ -225,8 +287,12 @@ documentRoutes.get('/documents/:documentId/download-url', async (req, res, next)
 
     res.json({
       ok: true,
-      document: mapDocumentRow(row),
+      document: mapDocumentRow({
+        ...row,
+        storage_bucket: storageBucket,
+      }),
       downloadUrl: data.signedUrl,
+      downloadFileName,
       expiresInSeconds,
     })
   } catch (error) {

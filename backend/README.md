@@ -94,8 +94,12 @@ Driver telemetry:
 Documents:
 
 - `POST /api/documents/upload` (multipart, field `file`)
+  - max file size: 10 MB
+  - accepted types: PDF and images (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`)
+  - returns `413` when file is too large and `415` when file type is unsupported
 - `GET /api/documents/shipment/:shipmentIdentifier`
 - `GET /api/documents/:documentId/download-url`
+  - returns a short-lived signed URL plus `downloadFileName`
 
 ## Sample payloads
 
@@ -137,6 +141,38 @@ Documents:
 - Live telemetry writes to Postgres first.
 - Runtime JSON fallback remains in:
   - `backend/src/data/runtimeStore.json`
+
+## Supabase Data Flow (Practical View)
+
+When a dashboard user uploads a POD/document:
+
+1. Frontend sends multipart form data to `POST /api/documents/upload`.
+2. Backend validates file size/type.
+3. File is stored in Supabase Storage bucket (`SUPABASE_STORAGE_BUCKET`, default `documents`).
+4. Metadata record is saved in Supabase Postgres table `documents`.
+5. Frontend refreshes shipment documents using `GET /api/documents/shipment/:shipmentIdentifier`.
+
+When a user downloads a document:
+
+1. Frontend requests `GET /api/documents/:documentId/download-url`.
+2. Backend looks up document metadata in Postgres.
+3. Backend creates a signed Storage URL with a safe download filename.
+4. Frontend opens that signed URL directly.
+
+How to inspect this in Supabase Studio:
+
+1. Go to Table Editor and open `shipments`, `documents`, `driver_location_events`, `driver_messages`.
+2. Go to Storage and open your documents bucket to verify uploaded files.
+3. Compare one `documents.storage_path` value with the corresponding file path in Storage.
+4. Use SQL Editor to trace one shipment end-to-end:
+
+```sql
+select s.shipment_identifier, d.id as document_id, d.file_name, d.storage_path, d.uploaded_at
+from shipments s
+left join documents d on d.shipment_id = s.id
+where s.shipment_identifier = 'LOAD-2026-2209'
+order by d.uploaded_at desc;
+```
 
 ## Demo Users After Seeding
 

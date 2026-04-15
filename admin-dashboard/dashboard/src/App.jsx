@@ -100,6 +100,60 @@ const toCsv = (rows) => {
   return [headerRow, ...bodyRows].join('\n')
 }
 
+const escapePdfText = (value) => {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[^\x20-\x7E]/g, '?')
+}
+
+const buildSimplePdfDocument = (title, lines) => {
+  const safeTitle = escapePdfText(title)
+  const safeLines = Array.isArray(lines)
+    ? lines.filter(Boolean).slice(0, 44).map((line) => escapePdfText(line))
+    : []
+
+  const contentLines = [safeTitle, '', ...safeLines]
+  const textInstructions = [
+    'BT',
+    '/F1 12 Tf',
+    '50 760 Td',
+    ...contentLines.flatMap((line, index) => {
+      if (index === 0) {
+        return [`(${line}) Tj`]
+      }
+
+      return ['0 -16 Td', `(${line}) Tj`]
+    }),
+    'ET',
+  ].join('\n')
+
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n',
+    '4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+    `5 0 obj\n<< /Length ${textInstructions.length} >>\nstream\n${textInstructions}\nendstream\nendobj\n`,
+  ]
+
+  let pdf = '%PDF-1.4\n'
+  const offsets = []
+
+  objects.forEach((objectContent) => {
+    offsets.push(pdf.length)
+    pdf += objectContent
+  })
+
+  const crossReferenceOffset = pdf.length
+  const crossReferenceEntries = ['0000000000 65535 f ', ...offsets.map((offset) => `${String(offset).padStart(10, '0')} 00000 n `)]
+
+  pdf += `xref\n0 ${objects.length + 1}\n${crossReferenceEntries.join('\n')}\n`
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${crossReferenceOffset}\n%%EOF`
+
+  return pdf
+}
+
 const fallbackData = {
   metrics: [
     {
@@ -972,8 +1026,13 @@ function App() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null)
   const [billingCurrentPage, setBillingCurrentPage] = useState(1)
   const [selectedReportId, setSelectedReportId] = useState(null)
+  const [topDateRange, setTopDateRange] = useState('Last 7 days')
+  const [topLocationScope, setTopLocationScope] = useState('All Locations')
 
   const [routeFilters, setRouteFilters] = useState({
+    status: 'All Status',
+    timeRange: 'Today',
+    driver: 'All Drivers',
   })
 
   // Settings State
@@ -990,6 +1049,7 @@ function App() {
   })
   const [settingsSaveState, setSettingsSaveState] = useState('idle')
   const [settingsLastSavedAt, setSettingsLastSavedAt] = useState(null)
+  const [actionMessage, setActionMessage] = useState('')
   const [isDocumentUploading, setIsDocumentUploading] = useState(false)
   const [documentUploadContext, setDocumentUploadContext] = useState(null)
   const [shipmentDocumentsByLoad, setShipmentDocumentsByLoad] = useState({})
@@ -1057,7 +1117,31 @@ function App() {
 
   const routeStatusOptions = ['All Status', 'On-time', 'Delayed', 'Critical Delay', 'Active']
   const routeTimeRangeOptions = ['Today', 'Yesterday', 'Last 7 Days']
+  const topDateRangeOptions = ['Today', 'Yesterday', 'Last 7 days', 'Last 30 days', 'This month']
   const routeDriverOptions = useMemo(() => ['All Drivers', ...new Set(routesTracking.map(r => r.driver))], [routesTracking])
+  const topLocationOptions = useMemo(() => {
+    const locations = new Set()
+
+    orders.forEach((order) => {
+      if (order.origin) {
+        locations.add(order.origin)
+      }
+
+      if (order.destination) {
+        locations.add(order.destination)
+      }
+    })
+
+    return ['All Locations', ...Array.from(locations).sort((a, b) => a.localeCompare(b))]
+  }, [orders])
+
+  useEffect(() => {
+    if (topLocationOptions.includes(topLocationScope)) {
+      return
+    }
+
+    setTopLocationScope('All Locations')
+  }, [topLocationOptions, topLocationScope])
 
   const filteredRoutes = useMemo(() => {
     return routesTracking.filter((route) => {
@@ -1345,7 +1429,7 @@ function App() {
   const handleOpenDocumentPicker = (shipmentIdentifier) => {
     const targetId = String(shipmentIdentifier ?? '').trim()
     if (!targetId) {
-      window.alert('No shipment selected for upload.')
+      showActionMessage('No shipment selected for upload.')
       return
     }
 
@@ -1367,6 +1451,21 @@ function App() {
       return
     }
 
+    const fileType = String(inputFile.type ?? '').toLowerCase()
+    const fileName = String(inputFile.name ?? '').toLowerCase()
+    const isPdfFile = fileType === 'application/pdf' || fileName.endsWith('.pdf')
+    const isImageFile = fileType.startsWith('image/')
+
+    if (!isPdfFile && !isImageFile) {
+      showActionMessage('Only PDF or image files are allowed for POD documents.')
+      return
+    }
+
+    if (inputFile.size > 10 * 1024 * 1024) {
+      showActionMessage('File size must be 10 MB or less.')
+      return
+    }
+
     setIsDocumentUploading(true)
 
     try {
@@ -1385,9 +1484,9 @@ function App() {
 
       await fetchShipmentDocuments(shipmentIdentifier)
       setActiveUploadId(null)
-      window.alert('Document uploaded successfully.')
+      showActionMessage('Document uploaded successfully.')
     } catch {
-      window.alert('Document upload failed. Please try again.')
+      showActionMessage('Document upload failed. Please try again.')
     } finally {
       setIsDocumentUploading(false)
       setDocumentUploadContext(null)
@@ -1413,14 +1512,14 @@ function App() {
 
       window.open(payload.downloadUrl, '_blank', 'noopener,noreferrer')
     } catch {
-      window.alert('Unable to download document right now.')
+      showActionMessage('Unable to download document right now.')
     }
   }
 
   const handleDownloadLatestDocument = async (shipmentIdentifier) => {
     const targetId = String(shipmentIdentifier ?? '').trim()
     if (!targetId) {
-      window.alert('No shipment selected for download.')
+      showActionMessage('No shipment selected for download.')
       return
     }
 
@@ -1431,13 +1530,13 @@ function App() {
         : await fetchShipmentDocuments(targetId)
 
       if (!documents.length) {
-        window.alert('No uploaded documents found for this shipment yet.')
+        showActionMessage('No uploaded documents found for this shipment yet.')
         return
       }
 
       await handleDownloadDocumentById(documents[0].id)
     } catch {
-      window.alert('Unable to fetch shipment documents.')
+      showActionMessage('Unable to fetch shipment documents.')
     }
   }
 
@@ -1469,7 +1568,7 @@ function App() {
       }, 1400)
     } catch {
       setSettingsSaveState('error')
-      window.alert('Failed to save settings to backend.')
+      showActionMessage('Failed to save settings to backend.')
     }
   }
 
@@ -1537,15 +1636,15 @@ function App() {
   }
 
   const showActionMessage = (message) => {
-    window.alert(message)
+    setActionMessage(message)
   }
 
-  const handleTopDateRangeClick = () => {
-    showActionMessage('Date range is currently set to the last 7 days.')
+  const handleTopDateRangeChange = (event) => {
+    setTopDateRange(event.target.value)
   }
 
-  const handleTopLocationScopeClick = () => {
-    showActionMessage('Location scope is currently set to all locations.')
+  const handleTopLocationScopeChange = (event) => {
+    setTopLocationScope(event.target.value)
   }
 
   const handleOpenAlertsCenter = () => {
@@ -1771,11 +1870,11 @@ function App() {
     const rows = reportExportRows[normalizedReportId] ?? [{ report: normalizedReportId, value: 'Summary generated' }]
 
     if (format === 'pdf') {
-      const content = rows
+      const summaryLines = rows
         .map((row) => Object.entries(row).map(([key, value]) => `${key}: ${value}`).join(' | '))
-        .join('\n')
+      const pdfDocument = buildSimplePdfDocument(`Report: ${normalizedReportId}`, summaryLines)
 
-      triggerFileDownload(`${normalizedReportId}-summary.txt`, content, 'text/plain;charset=utf-8')
+      triggerFileDownload(`${normalizedReportId}.pdf`, pdfDocument, 'application/pdf')
       return
     }
 
@@ -1796,12 +1895,27 @@ function App() {
     })
   }, [selectedOrder?.id])
 
+  useEffect(() => {
+    if (!actionMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setActionMessage('')
+    }, 3200)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [actionMessage])
+
   return (
     <LoadScript googleMapsApiKey={mapApiKey}>
       <div className="h-screen w-full bg-slate-50 text-slate-900">
         <input
           ref={documentUploadInputRef}
           type="file"
+          accept=".pdf,image/*"
           className="hidden"
           onChange={handleDocumentInputChange}
         />
@@ -1844,25 +1958,35 @@ function App() {
                   />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleTopDateRangeClick}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
-                >
+                <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
                   <CalendarDays className="h-4 w-4 text-slate-400" />
-                  Last 7 days
+                  <select
+                    value={topDateRange}
+                    onChange={handleTopDateRangeChange}
+                    className="bg-transparent text-sm text-slate-700 focus:outline-none"
+                    aria-label="Dashboard date range"
+                  >
+                    {topDateRangeOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
                   <ChevronDown className="h-4 w-4 text-slate-500" />
-                </button>
+                </label>
 
-                <button
-                  type="button"
-                  onClick={handleTopLocationScopeClick}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
-                >
+                <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
                   <MapPinned className="h-4 w-4 text-slate-400" />
-                  All Locations
+                  <select
+                    value={topLocationScope}
+                    onChange={handleTopLocationScopeChange}
+                    className="bg-transparent text-sm text-slate-700 focus:outline-none"
+                    aria-label="Dashboard location scope"
+                  >
+                    {topLocationOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
                   <ChevronDown className="h-4 w-4 text-slate-500" />
-                </button>
+                </label>
 
                 <div className="ml-auto flex items-center gap-4">
                   <button type="button" onClick={handleOpenAlertsCenter} className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
@@ -6421,6 +6545,11 @@ function App() {
             )}
           </main>
         </div>
+        {actionMessage ? (
+          <div className="pointer-events-none fixed bottom-6 right-6 z-[200] max-w-sm rounded-xl border border-blue-200 bg-blue-50/95 px-4 py-3 shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] backdrop-blur">
+            <p className="text-sm font-semibold text-blue-800">{actionMessage}</p>
+          </div>
+        ) : null}
       </div>
     </LoadScript>
   )

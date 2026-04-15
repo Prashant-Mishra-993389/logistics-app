@@ -1,3 +1,5 @@
+import { portalUrls } from "@/lib/platformConfig";
+
 export default function Footer() {
  return (
    <footer className="bg-background border-t border-white/10 pt-20 pb-10 px-6 md:px-[8vw]">
@@ -16,19 +18,19 @@ export default function Footer() {
        <div className="hidden md:block"></div>
        {/* Column 3 - Shop */}
        <div className="flex flex-col gap-4">
-         <h4 className="font-bebas text-[18px] tracking-[2px] text-white mb-2">SHOP</h4>
-         <a href="#the-cars" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">The Cars</a>
-         <a href="#faq" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">FAQs</a>
-         <a href="#the-cars" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Full Catalog</a>
+         <h4 className="font-bebas text-[18px] tracking-[2px] text-white mb-2">PORTALS</h4>
+         <a href={portalUrls.client} target="_blank" rel="noreferrer" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Client Dashboard</a>
+         <a href={portalUrls.driver} target="_blank" rel="noreferrer" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Driver Dashboard</a>
+         <a href={portalUrls.admin} target="_blank" rel="noreferrer" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Admin Dashboard</a>
        </div>
        {/* Column 4 - Legal */}
        <div className="flex flex-col gap-4">
-         <h4 className="font-bebas text-[18px] tracking-[2px] text-white mb-2">LEGAL</h4>
-         <a href="#faq" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Returns & Refunds</a>
-         <a href="#faq" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Shipping Policy</a>
-         <a href="#faq" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Privacy Policy</a>
-         <a href="#faq" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Terms of Service</a>
-         <a href="#faq" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Contact</a>
+         <h4 className="font-bebas text-[18px] tracking-[2px] text-white mb-2">QUICK LINKS</h4>
+         <a href="#workflow" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">How It Works</a>
+         <a href="#features" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Platform Features</a>
+         <a href="#roles" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Roles</a>
+         <a href="#faq" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">FAQ</a>
+         <a href="mailto:support@manifestlogistics.com" className="font-inter text-text-secondary text-[14px] hover:text-white transition-colors">Contact</a>
        </div>
      </div>
      <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">

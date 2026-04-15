@@ -1,18 +1,42 @@
 {
   "driverLocation": {
     "latest": {
-      "id": "loc-1776184035983",
-      "shipmentId": "LOAD-2026-2209",
-      "loadId": "LOAD-2026-2209",
-      "driver": "Alex Rivera",
-      "latitude": 30.2688,
-      "longitude": -97.7426,
-      "speedMph": 41,
-      "recordedAt": "2026-04-14T16:27:15.983Z",
+      "id": "loc-1776273647529",
+      "shipmentId": "LD-2024-001847",
+      "loadId": "LD-2024-001847",
+      "driver": "Mike Rodriguez",
+      "latitude": 35.4676,
+      "longitude": -97.5164,
+      "speedMph": 8,
+      "recordedAt": "2026-04-15T17:20:47.503Z",
       "source": "current-shipment",
-      "receivedAt": "2026-04-14T16:27:15.983Z"
+      "receivedAt": "2026-04-15T17:20:47.529Z"
     },
     "history": [
+      {
+        "id": "loc-1776273647529",
+        "shipmentId": "LD-2024-001847",
+        "loadId": "LD-2024-001847",
+        "driver": "Mike Rodriguez",
+        "latitude": 35.4676,
+        "longitude": -97.5164,
+        "speedMph": 8,
+        "recordedAt": "2026-04-15T17:20:47.503Z",
+        "source": "current-shipment",
+        "receivedAt": "2026-04-15T17:20:47.529Z"
+      },
+      {
+        "id": "loc-1776273609932",
+        "shipmentId": "LD-2024-001847",
+        "loadId": "LD-2024-001847",
+        "driver": "Mike Rodriguez",
+        "latitude": 35.4676,
+        "longitude": -97.5164,
+        "speedMph": 42,
+        "recordedAt": "2026-04-15T17:20:09.892Z",
+        "source": "current-shipment",
+        "receivedAt": "2026-04-15T17:20:09.932Z"
+      },
       {
         "id": "loc-1776184035983",
         "shipmentId": "LOAD-2026-2209",

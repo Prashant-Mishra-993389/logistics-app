@@ -1,11 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { openInNewTab, rolePortalMap } from "@/lib/platformConfig";
 
 const ROLES = [
- { id:"client", name:"INDUSTRIAL CLIENTS", specs:"BOOK · TRACK · PAY", quote:'"Complete transparency and zero delays for your logistics."', video:"/assets/hero/VIdeo.mp4" },
- { id:"driver", name:"TRANSPORT DRIVERS", specs:"ACCEPT JOBS · EARN · PROGRESS", quote:'"Take control of your routes and maximize your earnings."', video:"/assets/hero/VIdeo.mp4" },
- { id:"admin", name:"SYSTEM ADMINS", specs:"MONITOR · MANAGE · RESOLVE", quote:'"A bird\'s-eye view of every shipment and transaction."', video:"/assets/hero/VIdeo.mp4" },
+ { id:"client", name:"INDUSTRIAL CLIENTS", specs:"BOOK · TRACK · PAY", quote:'"Complete transparency and zero delays for your logistics."', video:"/assets/hero/hero-gt3.mp4" },
+ { id:"driver", name:"TRANSPORT DRIVERS", specs:"ACCEPT JOBS · EARN · PROGRESS", quote:'"Take control of your routes and maximize your earnings."', video:"/assets/hero/hero-m4.mp4" },
+ { id:"admin", name:"SYSTEM ADMINS", specs:"MONITOR · MANAGE · RESOLVE", quote:'"A bird\'s-eye view of every shipment and transaction."', video:"/assets/hero/hero-sto.mp4" },
 ];
 
 export default function Collection() {
@@ -35,11 +35,13 @@ export default function Collection() {
              <div className="font-inter text-[14px] italic text-[#6A6A6A] leading-relaxed mb-6">{role.quote}</div>
              <div className="mt-auto pt-6 border-t border-[rgba(255,255,255,0.04)]">
                 <button 
-                  onClick={() => {}}
+                  type="button"
+                  onClick={() => openInNewTab(rolePortalMap[role.id].url)}
                   className="w-full bg-accent-red text-white border-none py-3 font-inter text-[11px] tracking-[3px] uppercase font-bold hover:bg-red-700 transition-colors"
                 >
-                  LEARN MORE
+                  OPEN PORTAL
                 </button>
+                <p className="mt-3 font-inter text-[11px] text-white/35 break-all">{rolePortalMap[role.id].url}</p>
              </div>
            </div>
          </motion.div>

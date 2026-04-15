@@ -10,7 +10,7 @@ const STEPS = [
 
 export default function HowItWorks() {
   return (
-    <section className="bg-background px-6 py-24 md:px-[8vw] border-y border-white/5">
+    <section id="workflow" className="bg-background px-6 py-24 md:px-[8vw] border-y border-white/5">
       <div className="max-w-7xl mx-auto">
         <div className="mb-16 md:mb-24 flex flex-col md:flex-row md:items-end justify-between gap-8">
           <div>

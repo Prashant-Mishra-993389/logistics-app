@@ -13,7 +13,7 @@ const FEATURES = [
 
 export default function Features() {
   return (
-    <section className="bg-[#0F0F0F] px-6 py-24 md:px-[8vw] border-t border-white/5">
+    <section id="features" className="bg-[#0F0F0F] px-6 py-24 md:px-[8vw] border-t border-white/5">
       <div className="flex flex-col items-center mb-16 text-center">
         <p className="font-inter text-[11px] tracking-[5px] text-accent-red uppercase mb-6">ADVANCED CAPABILITIES</p>
         <h2 className="font-bebas text-[48px] md:text-[72px] leading-none mb-6">BUILT FOR SCALE.</h2>

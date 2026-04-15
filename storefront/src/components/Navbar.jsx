@@ -15,7 +15,7 @@ export default function Navbar() {
   const links = [
     { label: "PLATFORM ROLES", href: "#roles" },
     { label: "WHY US", href: "#the-proof" },
-    { label: "BOOK A TRUCK", href: "#roles" },
+    { label: "OPEN PORTALS", href: "#portal-launchpad" },
     { label: "FAQS", href: "#faq" },
   ];
 
@@ -23,7 +23,7 @@ export default function Navbar() {
     <>
       <motion.nav initial={{ y: -100 }} animate={{ y: 0 }}
         transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className={`fixed top-0 left-0 w-full h-16 z-1000 flex items-center justify-between px-6 md:px-[4vw] transition-all duration-300 ${scrolled ? "bg-background/40 backdrop-blur-2xl saturate-180 border-b border-white/5" : "bg-transparent"}`}
+        className={`fixed top-0 left-0 w-full h-16 z-[1000] flex items-center justify-between px-6 md:px-[4vw] transition-all duration-300 ${scrolled ? "bg-background/40 backdrop-blur-2xl saturate-180 border-b border-white/5" : "bg-transparent"}`}
       >
         <a href="#top" className="group inline-flex flex-col items-start pt-1.5">
           <span className="font-bebas text-[18px] tracking-[8px] text-white leading-none uppercase">MANIFEST</span>
@@ -45,7 +45,7 @@ export default function Navbar() {
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-1001 bg-background flex flex-col items-center justify-center gap-10">
+            className="fixed inset-0 z-[1001] bg-background flex flex-col items-center justify-center gap-10">
             <button className="absolute top-6 right-6 text-white" onClick={() => setOpen(false)}><X className="w-8 h-8" /></button>
             {links.map((item, i) => (
               <a key={i} href={item.href} onClick={() => setOpen(false)}

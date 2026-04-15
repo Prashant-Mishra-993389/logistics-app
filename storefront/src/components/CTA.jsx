@@ -1,9 +1,17 @@
 "use client";
 import { motion } from "framer-motion";
+import { openInNewTab, portalUrls } from "@/lib/platformConfig";
 
 const WORDS = [["SCALE", "OR", "STAGNATE"], ["IT'S", "YOUR", "CHOICE"]];
 
 export default function CTA() {
+  const scrollToWorkflow = () => {
+    const workflowSection = document.getElementById("workflow");
+    if (workflowSection) {
+      workflowSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <section className="relative h-screen w-full overflow-hidden bg-background flex items-center justify-center">
       <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(ellipse_100%_80%_at_50%_100%,rgba(232,0,13,0.08)_0%,transparent_70%)]" />
@@ -23,8 +31,20 @@ export default function CTA() {
         </h2>
         <p className="font-inter text-[18px] text-text-secondary max-w-[500px] mx-auto mb-12">One moves faster. One doesn&apos;t.</p>
         <div className="flex flex-col md:flex-row justify-center gap-4 mb-20">
-          <a href="#roles" className="font-bebas text-[18px] tracking-[4px] px-14 py-5 uppercase text-white bg-accent-red btn-premium min-w-[300px]">GET STARTED NOW</a>
-          <button className="bg-transparent border border-white/[0.08] text-white/20 font-bebas text-[18px] tracking-[4px] px-14 py-5 uppercase min-w-[300px]">KEEP DOING IT MANUALLY.</button>
+          <button
+            type="button"
+            onClick={() => openInNewTab(portalUrls.client)}
+            className="font-bebas text-[18px] tracking-[4px] px-14 py-5 uppercase text-white bg-accent-red btn-premium min-w-[300px]"
+          >
+            OPEN CLIENT DASHBOARD
+          </button>
+          <button
+            type="button"
+            onClick={scrollToWorkflow}
+            className="bg-transparent border border-white/[0.08] text-white/60 hover:text-white font-bebas text-[18px] tracking-[4px] px-14 py-5 uppercase min-w-[300px] transition-colors"
+          >
+            SEE HOW IT WORKS
+          </button>
         </div>
       </motion.div>
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 font-inter text-[12px] tracking-[2px] text-[#2A2A2A] uppercase w-full text-center z-10">

@@ -1,11 +1,39 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { openInNewTab, portalUrls } from "@/lib/platformConfig";
 
 const SLIDES = [
-  { id: "connect", handle: "connect-industries", tab: "TRANSPORTATION", headline: "CONNECTING INDUSTRIES.", subline: "Find available trucks quickly and move your cargo without delays.", action: "REQUEST A TRUCK", videoPosition: "center center" },
-  { id: "track", handle: "real-time-track", tab: "LIVE TRACKING", headline: "TRACK EVERY METRE.", subline: "Experience poor real-time tracking no more. Get complete visibility into your shipments.", action: "TRACK SHIPMENT", videoPosition: "center center" },
-  { id: "price", handle: "transparent-price", tab: "TRANSPARENT PRICING", headline: "NO HIDDEN COSTS.", subline: "Dynamic pricing calculated purely on distance and load. Total transparency.", action: "VIEW PRICING", videoPosition: "center center" },
+  {
+    id: "connect",
+    handle: "connect-industries",
+    tab: "TRANSPORTATION",
+    headline: "CONNECTING INDUSTRIES.",
+    subline: "Find available trucks quickly and move your cargo without delays.",
+    action: "REQUEST A TRUCK",
+    video: "/assets/hero/hero-gt3.mp4",
+    videoPosition: "center center",
+  },
+  {
+    id: "track",
+    handle: "real-time-track",
+    tab: "LIVE TRACKING",
+    headline: "TRACK EVERY METRE.",
+    subline: "Experience poor real-time tracking no more. Get complete visibility into your shipments.",
+    action: "TRACK SHIPMENT",
+    video: "/assets/hero/hero-m4.mp4",
+    videoPosition: "center center",
+  },
+  {
+    id: "price",
+    handle: "transparent-price",
+    tab: "TRANSPARENT PRICING",
+    headline: "NO HIDDEN COSTS.",
+    subline: "Dynamic pricing calculated purely on distance and load. Total transparency.",
+    action: "VIEW PRICING",
+    video: "/assets/hero/hero-sto.mp4",
+    videoPosition: "center center",
+  },
 ];
 
 export default function Hero() {
@@ -22,12 +50,33 @@ export default function Hero() {
 
   const slide = SLIDES[activeIdx];
 
+  const scrollToSection = (sectionId) => {
+    const section = document.getElementById(sectionId);
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handlePrimaryAction = () => {
+    if (slide.id === "track") {
+      openInNewTab(portalUrls.client);
+      return;
+    }
+
+    if (slide.id === "price") {
+      scrollToSection("features");
+      return;
+    }
+
+    scrollToSection("roles");
+  };
+
   return (
     <section className="relative h-screen w-full overflow-hidden bg-background flex flex-col justify-center">
       <motion.div style={{ y: backgroundY }} className="absolute inset-0 w-full h-[120%] -top-[10%] z-0">
         {mounted && (
-          <video src="/assets/hero/VIdeo.mp4" autoPlay loop muted playsInline
-            style={{ objectPosition: "center center" }}
+          <video src={slide.video} autoPlay loop muted playsInline
+            style={{ objectPosition: slide.videoPosition }}
             className="absolute inset-0 w-full h-full object-cover opacity-80"
           />
         )}
@@ -43,7 +92,8 @@ export default function Hero() {
             <h1 className="font-bebas text-[clamp(64px,10vw,120px)] text-white leading-[0.87] mb-6 uppercase">{slide.headline}</h1>
             <p className="font-inter text-[16px] text-text-secondary max-w-90 leading-relaxed mb-10">{slide.subline}</p>
             <button
-              onClick={() => { }}
+              type="button"
+              onClick={handlePrimaryAction}
               className="inline-block font-bebas text-[16px] tracking-[4px] px-10 py-4 uppercase text-white bg-accent-red hover:bg-red-700 transition-colors"
             >
               {slide.action}
